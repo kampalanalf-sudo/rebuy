@@ -97,7 +97,13 @@ class handler(httpd.BaseHTTPRequestHandler):  # noqa: N801  (Vercel expects this
     def _send(self, status: int, headers: dict, body: bytes) -> None:
         self.send_response(status)
         for key, value in headers.items():
-            self.send_header(key, str(value))
+            # A list value (e.g. several Set-Cookie lines) must be emitted as
+            # repeated headers, not as a Python repr of the list.
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    self.send_header(key, str(item))
+            else:
+                self.send_header(key, str(value))
         if "content-length" not in {k.lower() for k in headers}:
             self.send_header("content-length", str(len(body)))
         self.end_headers()

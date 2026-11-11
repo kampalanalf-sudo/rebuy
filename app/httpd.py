@@ -312,7 +312,14 @@ class Handler(BaseHTTPRequestHandler):
         if merged.get("content-type", "").startswith("text/html"):
             merged.setdefault("content-security-policy", CSP)
         for k, v in merged.items():
-            self.send_header(k, str(v))
+            # Set-Cookie is the one header that may legally repeat; a list value
+            # must become separate header lines. str(list) would put a Python
+            # repr on the wire and the browser would drop every cookie in it.
+            if isinstance(v, (list, tuple)):
+                for item in v:
+                    self.send_header(k, str(item))
+            else:
+                self.send_header(k, str(v))
         if "content-length" not in {k.lower() for k in merged}:
             self.send_header("content-length", str(len(body)))
         self.end_headers()
