@@ -193,6 +193,8 @@ def google_start(ctx):
     body = json.dumps({"url": out["url"]}).encode()
     cookie = (f"rebuy_oauth={out['cookie']}; Path=/api/auth/google; HttpOnly; SameSite=Lax; "
               f"Max-Age=600" + ("; Secure" if config.COOKIE_SECURE else ""))
+    _trace_call("start", f"next={want} redirect_uri={auth_redirect_uri(ctx)} "
+                         f"secure={config.COOKIE_SECURE}")
     return 200, {"content-type": "application/json", "set-cookie": cookie,
                  "content-length": str(len(body))}, body
 
@@ -205,18 +207,33 @@ def auth_redirect_uri(ctx) -> str:
     return f"{proto}://{host}/api/auth/google/callback"
 
 
+def _trace_call(step: str, detail: str = "") -> None:
+    """Record what the OAuth callback saw. Best-effort: never breaks the flow."""
+    try:
+        db.audit("oauth", "google.callback", None, "oauth", step, detail)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @route("GET", "/api/auth/google/callback", "none")
 def google_callback(ctx):
     """Google redirects the browser here, so answer with a redirect rather than JSON."""
     code = ctx.q("code", "")
     state = ctx.q("state", "")
     err = ctx.q("error", "")
+    cookie = ctx.headers.get("cookie", "") or ""
+    has_sess = "rebuy_session=" in cookie
+    has_oauth = "rebuy_oauth=" in cookie
+    _trace_call("enter", f"code={len(code)} state={len(state)} err={err[:40]!r} "
+                         f"cookie_oauth={has_oauth} cookie_session={has_sess} "
+                         f"ua={(ctx.headers.get('user-agent') or '')[:80]!r}")
     if err:
+        _trace_call("google_error", err[:200])
         return _redirect("/#/login?error=" + urllib.parse.quote(err), clear_oauth=True)
-    cookie = ctx.headers.get("cookie", "")
     m = re.search(r"rebuy_oauth=([^;]+)", cookie)
     if not code:
         # The user pressed Cancel/Deny on Google's screen.
+        _trace_call("no_code", "google returned no authorization code")
         return _redirect("/#/login?error=google_cancelled", clear_oauth=True)
     if not m:
         # A code arrived but our state cookie did not. That is not a cancellation:
@@ -224,27 +241,40 @@ def google_callback(ctx):
         # privacy modes, a different host than the one that started the flow, or an
         # expired 10-minute window). Say so, because "cancelled" sends the user
         # looking for a button they never pressed.
+        _trace_call("state_lost", "code present but no rebuy_oauth cookie")
         return _redirect("/#/login?error=google_state_lost", clear_oauth=True)
     try:
         out = auth.google_exchange(code, auth_redirect_uri(ctx), m.group(1), state)
         user = auth.provision_google_user(out["claims"])
         token = auth.start_session(user, _client_ip(ctx), _ua(ctx), "google")
     except auth.AuthError as e:
+        _trace_call("auth_error", f"{e.code}: {str(e)[:200]}")
         return _redirect("/#/login?error=" + urllib.parse.quote(e.code), clear_oauth=True)
-    db.audit(user["email"], "auth.login.google", user.get("shop_id"))
+    except Exception as e:  # noqa: BLE001
+        _trace_call("crash", f"{type(e).__name__}: {str(e)[:250]}")
+        raise
     nxt = out["next"] if out["next"].startswith("/") else "/dashboard"
-    return _redirect("/#" + nxt.lstrip("/"), token=token, clear_oauth=True)
+    _trace_call("success", f"user={user['email']} role={user.get('role')} "
+                           f"cookie_set=yes next={nxt}")
+    db.audit(user["email"], "auth.login.google", user.get("shop_id"))
+    return _redirect("/#" + nxt.lstrip("/"), token=token)
 
 
 def _redirect(path: str, token: str = "", clear_oauth: bool = False):
+    """302 with AT MOST ONE Set-Cookie header.
+
+    Vercel's proxy collapses repeated Set-Cookie headers into a single one, and
+    only one cookie survives the trip (a well-known platform behaviour). Since
+    losing the session cookie means the user is silently bounced back to the
+    login page, every response here sets exactly one cookie and no more. The
+    short-lived rebuy_oauth cookie therefore is NOT cleared here; it is cleared
+    when the flow next starts, and it expires on its own after 10 minutes.
+    """
     headers = {"location": path, "cache-control": "no-store"}
-    cookies = []
     if token:
-        cookies.append(auth.session_cookie(token))
-    if clear_oauth:
-        cookies.append("rebuy_oauth=; Path=/api/auth/google; Max-Age=0")
-    if cookies:
-        headers["set-cookie"] = cookies
+        headers["set-cookie"] = auth.session_cookie(token)
+    elif clear_oauth:
+        headers["set-cookie"] = "rebuy_oauth=; Path=/api/auth/google; Max-Age=0"
     return 302, headers, b""
 
 
