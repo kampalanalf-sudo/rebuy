@@ -58,8 +58,8 @@ There are no seeded credentials. Accounts are created one of three ways:
 3. **Platform admin** — the first account whose email is listed in
    `REBUY_ADMIN_EMAILS` is promoted to `role='admin'` on sign-in.
 
-Set `REBUY_ADMIN_EMAILS=you@yourcompany.ug` before the first production login,
-otherwise nobody can reach `/admin`.
+Set `REBUY_ADMIN_EMAILS=kampalanalf@gmail.com` before the first production
+login, otherwise nobody can reach `/admin`.
 
 ## Why the app is not "hosted by Supabase"
 

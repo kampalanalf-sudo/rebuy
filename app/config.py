@@ -23,6 +23,45 @@ from __future__ import annotations
 import os
 import secrets
 
+
+def load_env_file(path: str = "", override: bool = False) -> int:
+    """Read a .env file into os.environ — the same contract as `set -a; . .env`.
+
+    Real environment variables always win unless override is set, so a container
+    or Vercel project that injects REBUY_SECRET_KEY cannot be clobbered by a
+    stray .env baked into an image. Returns how many keys were applied.
+    """
+    candidates = [path] if path else [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+    ]
+    applied = 0
+    for candidate in candidates:
+        if not candidate or not os.path.isfile(candidate):
+            continue
+        with open(candidate, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                if line.startswith("export "):
+                    line = line[7:]
+                key, _, value = line.partition("=")
+                key, value = key.strip(), value.strip()
+                if not key:
+                    continue
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                    value = value[1:-1]
+                if override or key not in os.environ:
+                    os.environ[key] = value
+                    applied += 1
+        break  # first file found wins
+    return applied
+
+
+# load before anything below reads the environment
+load_env_file()
+
 ENV = (os.environ.get("REBUY_ENV") or "development").strip().lower()
 IS_PROD = ENV == "production"
 

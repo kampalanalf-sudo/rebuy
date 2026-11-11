@@ -87,7 +87,6 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TEXT NOT NULL,
   FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_users_google ON users(google_sub) WHERE google_sub <> '';
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
@@ -789,10 +788,63 @@ def init_schema() -> None:
         with conn.cursor() as cur:
             for stmt in schema_pg.STATEMENTS:
                 cur.execute(stmt)
+        _migrate_postgres()
         return
     conn = connect()
     conn.executescript(SCHEMA)
     conn.commit()
+    _migrate_sqlite()
+
+
+# Columns added after the first release. A database created by an older build
+# will have the tables but not these columns; `CREATE TABLE IF NOT EXISTS` is a
+# no-op in that case, so they are added explicitly here. Keep this list additive
+# and idempotent — it runs on every boot.
+_ADDED_COLUMNS = {
+    "users": [
+        ("google_sub", "TEXT DEFAULT ''"),
+        ("email_verified", "INTEGER DEFAULT 0"),
+    ],
+    "sessions": [
+        ("ip", "TEXT DEFAULT ''"),
+        ("user_agent", "TEXT DEFAULT ''"),
+        ("method", "TEXT DEFAULT 'password'"),
+    ],
+}
+
+# (table, index name, column) — created after the columns exist
+_ADDED_INDEXES = [
+    ("users", "uq_users_google", "google_sub", "google_sub <> ''"),
+]
+
+
+def _migrate_sqlite() -> None:
+    conn = connect()
+    for table, cols in _ADDED_COLUMNS.items():
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        for name, decl in cols:
+            if name not in existing:
+                conn.execute(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {decl}')
+                conn.commit()
+    for table, index, column, predicate in _ADDED_INDEXES:
+        try:
+            conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS {index} ON "{table}"({column}) WHERE {predicate}')
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column still absent on a very old database
+
+
+def _migrate_postgres() -> None:
+    conn = _pg()
+    with conn.cursor() as cur:
+        for table, cols in _ADDED_COLUMNS.items():
+            for name, decl in cols:
+                cur.execute(f'ALTER TABLE "{table}" ADD COLUMN IF NOT EXISTS "{name}" {decl}')
+        for table, index, column, predicate in _ADDED_INDEXES:
+            try:
+                cur.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS {index} ON "{table}"({column}) WHERE {predicate}')
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def fix_sequences() -> None:

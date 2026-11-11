@@ -66,7 +66,7 @@ There are no default logins — no seeded passwords exist in the codebase.
 |---|---|
 | Continue with Google | `REBUY_GOOGLE_CLIENT_ID` + `REBUY_GOOGLE_CLIENT_SECRET` |
 | Email + password | self-serve signup, or an invitation from a shop owner |
-| Platform admin at `/admin` | your email listed in `REBUY_ADMIN_EMAILS` |
+| Platform admin at `/admin` | your email listed in `REBUY_ADMIN_EMAILS` (currently `kampalanalf@gmail.com`) |
 
 Locally, `REBUY_ENV=development` (the default) lets you seed a throwaway demo
 fleet with `REBUY_SEED_DEMO=1`. Demo users live on `@example.com` with random
