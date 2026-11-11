@@ -60,9 +60,11 @@ STATEMENTS = [
   last_login    TEXT,
   created_at    TEXT NOT NULL
 )""",
-    "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_google ON users(google_sub) WHERE google_sub <> ''",
     "CREATE INDEX IF NOT EXISTS idx_users_shop ON users(shop_id)",
 
+    # uq_users_google is created by db._migrate_postgres() instead of here: on a
+# database from an earlier release the users column it indexes does not exist
+# yet, and this statement list runs before the ALTER TABLE that adds it.
     """CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

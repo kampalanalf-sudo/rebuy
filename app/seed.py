@@ -228,6 +228,10 @@ def ensure_bootstrapped(force: bool = False) -> dict:
     engine.seed_default_templates()
     from . import config
 
+    if config.IS_PROD:
+        n_users = db.scalar("SELECT COUNT(*) FROM users", (), 0)
+        return {"skipped": True, "reason": "production: demo seeding is disabled",
+                "users": n_users}
     if not config.SEED_DEMO:
         n_users = db.scalar("SELECT COUNT(*) FROM users", (), 0)
         return {"skipped": True, "reason": "demo seeding disabled (REBUY_SEED_DEMO=0)",

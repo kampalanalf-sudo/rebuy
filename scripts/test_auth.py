@@ -266,6 +266,22 @@ check("swapped payload rejected", raises(lambda: _authmod.decode_id_token(swappe
 _authmod._http_json = lambda url, data=None, headers=None: {"keys": []}
 check("unknown signing key rejected", raises(lambda: _authmod.decode_id_token(real), "google_bad_token"))
 
+print("\n\033[1mproduction gates\033[0m")
+import importlib  # noqa: E402
+
+_prev_env = os.environ.get("REBUY_ENV")
+os.environ["REBUY_ENV"] = "production"
+os.environ["REBUY_SEED_DEMO"] = "1"
+os.environ["REBUY_SECRET_KEY"] = "p" * 48
+import app.config as _cfg  # noqa: E402
+importlib.reload(_cfg)
+check("REBUY_SEED_DEMO=1 cannot enable seeding in production", _cfg.SEED_DEMO is False)
+check("self-serve signup is closed in production", _cfg.ALLOW_SIGNUP is False)
+check("cookies are Secure in production", _cfg.COOKIE_SECURE is True)
+os.environ["REBUY_ENV"] = _prev_env or "development"
+os.environ.pop("REBUY_SEED_DEMO", None)
+importlib.reload(_cfg)
+
 print(f"\n\033[1m{len(PASSED)} passed, {len(FAILED)} failed\033[0m")
 if FAILED:
     print("failed:", ", ".join(FAILED))

@@ -101,7 +101,11 @@ GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 
 ALLOWED_EMAILS = _list("REBUY_ALLOWED_EMAILS")
 ADMIN_EMAILS = _list("REBUY_ADMIN_EMAILS")
-SEED_DEMO = _bool("REBUY_SEED_DEMO", default=not IS_PROD)
+# Demo seeding is a development convenience, never a production mode. In
+# production it is hard-off regardless of the environment variable: a stray
+# REBUY_SEED_DEMO=1 in a committed .env file once refilled a wiped production
+# database with 120 shops of fictional customers.
+SEED_DEMO = (not IS_PROD) and _bool("REBUY_SEED_DEMO", default=True)
 
 COOKIE_SECURE = _bool("REBUY_COOKIE_SECURE", default=IS_PROD)
 COOKIE_NAME = "rebuy_session"
