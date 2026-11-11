@@ -54,6 +54,44 @@ HEADER_SYNONYMS = {
     "notes": ["notes", "note", "comment", "remarks"],
 }
 
+# Healthcare spreadsheets do not look like retail receipts. These are the
+# column names hospital exports actually use (C-Care style registration and
+# billing exports). Kept separate from HEADER_SYNONYMS so the retail importer
+# is unaffected.
+CLIENT_SYNONYMS = {
+    "name": ["client", "client_name", "patient", "patient_name", "full_name", "fullname",
+             "names", "name", "member", "member_name", "beneficiary", "customer",
+             "customer_name", "surname", "first_name"],
+    "phone": ["phone", "phone_number", "mobile", "mobile_number", "tel", "telephone",
+              "contact", "contact_number", "msisdn", "cell", "whatsapp", "patient_phone",
+              "client_phone"],
+    "email": ["email", "e_mail", "email_address", "mail", "patient_email"],
+    "dob": ["dob", "date_of_birth", "birth_date", "birthdate", "birthday", "d_o_b"],
+    "identifier": ["file_no", "file_number", "patient_no", "patient_number", "client_id",
+                   "client_no", "mrn", "medical_record_number", "record_no", "id_no",
+                   "member_no", "card_no", "registration_no", "hospital_no"],
+    "branch_label": ["branch", "facility", "clinic", "hospital", "location", "site",
+                     "centre", "center", "outlet", "department"],
+    "area": ["area", "town", "city", "district", "region", "address", "residence",
+             "suburb", "village"],
+    "condition": ["condition", "diagnosis", "complaint", "reason", "service",
+                  "service_type", "treatment", "procedure", "notes", "remarks"],
+    "last_visit_at": ["last_visit", "last_seen", "last_visit_date", "visit_date",
+                      "date_seen", "last_appointment", "last_encounter"],
+    "last_service": ["last_service", "service", "department", "specialty", "speciality",
+                     "clinic_attended", "unit"],
+    "next_due_on": ["next_due", "next_visit", "next_appointment", "review_date",
+                    "follow_up", "followup_date", "due_date", "recall_date"],
+    "visits_count": ["visits", "visit_count", "no_of_visits", "number_of_visits",
+                     "encounters", "attendance"],
+    "tags": ["tags", "group", "category", "cohort", "scheme", "insurance", "payer"],
+    "clinician": ["clinician", "doctor", "physician", "attended_by", "seen_by",
+                  "provider", "consultant", "nurse"],
+}
+
+# Columns that must be encrypted on the way in.
+_CLIENT_ENCRYPTED = {"condition", "identifier", "dob", "address", "notes"}
+
 DATE_PATTERNS = [
     "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d/%m/%y", "%m/%d/%Y", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S",
     "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%d.%m.%Y", "%Y%m%d",
@@ -583,3 +621,272 @@ def confirm_receipt(shop_id: int, receipt_id: int, payload: dict) -> dict:
     db.update("receipts", receipt_id, {"parse_status": "imported" if rep["sales"] else "failed",
                                        "parsed_json": json.dumps(payload)[:20000]})
     return {"ok": bool(rep["sales"]), "report": rep}
+
+
+# ============================================================ client records
+def map_client_headers(headers: list[str]) -> dict[str, int]:
+    """Fuzzy-map a hospital's export columns onto client fields."""
+    out: dict[str, int] = {}
+    norm = [(h or "").strip().lower().replace(" ", "_").replace("-", "_") for h in headers]
+    for field, syns in CLIENT_SYNONYMS.items():
+        for i, h in enumerate(norm):
+            if h.strip("_") in syns:
+                out[field] = i
+                break
+        if field in out:
+            continue
+        for i, h in enumerate(norm):
+            if any(s in h for s in syns) and len(h) > 2:
+                out.setdefault(field, i)
+                break
+    return out
+
+
+def _pick_header_row(rows: list[list[str]]) -> int:
+    """Find the header row: the first of the first five that looks like labels."""
+    keys = set()
+    for syns in CLIENT_SYNONYMS.values():
+        keys.update(syns)
+    for i, r in enumerate(rows[:5]):
+        cells = [str(c or "").strip().lower().replace(" ", "_") for c in r]
+        hits = sum(1 for c in cells if c.strip("_") in keys or any(k in c for k in keys if len(k) > 3))
+        if hits >= 2:
+            return i
+    return 0
+
+
+def read_client_rows(filename: str, raw: bytes) -> tuple[list[str], list[list[str]]]:
+    """Decode an uploaded client export into (headers, data rows)."""
+    low = (filename or "").lower()
+    if low.endswith((".xlsx", ".xlsm", ".xls")):
+        rows = read_xlsx(raw)
+    else:
+        rows = read_csv(raw.decode("utf-8", errors="replace"))
+    if not rows:
+        return [], []
+    h = _pick_header_row(rows)
+    return [str(c or "").strip() for c in rows[h]], rows[h + 1:]
+
+
+def normalise_phone(raw: str) -> str:
+    """Normalise a phone number to E.164, strictly for Uganda (+256 + 9 digits).
+
+    Undeliverable numbers are the single biggest cause of reminders that look
+    sent but never arrive, so this refuses anything it cannot make a real
+    number out of rather than passing it through to fail silently later.
+    Non-Ugandan international numbers are kept when they are unambiguous.
+    """
+    s = "".join(ch for ch in (raw or "") if ch.isdigit() or ch == "+")
+    if not s:
+        return ""
+    had_plus = s.startswith("+")
+    s = s.replace("+", "")
+    if s.startswith("00"):
+        s = s[2:]
+    # 0XXXXXXXXX  (local, 10 digits)  ->  +256XXXXXXXXX
+    if s.startswith("0") and len(s) == 10:
+        return "+256" + s[1:]
+    # 256 + 9 digits, e.g. 256772123456
+    if s.startswith("256"):
+        rest = s[3:]
+        # 256 7XXXXXXXX  (9 subscriber digits, must not start with 0)
+        if len(rest) == 9 and not rest.startswith("0"):
+            return "+256" + rest
+        # 256 07XXXXXXXX  (a stray trunk 0 after the country code)
+        if len(rest) == 10 and rest.startswith("0"):
+            return "+256" + rest[1:]
+        return ""                                       # wrong length: reject
+    # 7XXXXXXXX (9 digits, no country code)
+    if s.startswith("7") and len(s) == 9:
+        return "+256" + s
+    # Anything else: accept only as an explicit international number with '+'
+    if had_plus and 7 <= len(s) <= 15:
+        return "+" + s
+    return ""
+
+
+def validate_client_records(records: list[dict]) -> list[dict]:
+    """Attach a per-row verdict: ok, or the reason it cannot be imported."""
+    out = []
+    for i, r in enumerate(records):
+        name = (r.get("name") or "").strip()
+        phone_raw = (r.get("phone") or "").strip()
+        phone = normalise_phone(phone_raw)
+        problems = []
+        if not name:
+            problems.append("no name")
+        # Prefer the specific complaint: "phone '123' is not usable" tells the
+        # operator what to fix, "no phone or email" just tells them something
+        # is wrong.
+        if phone_raw and not phone:
+            problems.append(f"phone '{phone_raw}' is not a valid number")
+        elif not phone and not (r.get("email") or "").strip():
+            problems.append("no phone or email — cannot be messaged")
+        out.append({**r, "_row": i + 1, "name": name, "phone": phone,
+                    "ok": not problems, "problems": problems})
+    return out
+
+
+def fingerprint(rec: dict) -> str:
+    """Identity for dedupe: phone first, else identifier, else name+area."""
+    phone = normalise_phone(rec.get("phone") or "")
+    if phone:
+        return "p:" + phone
+    ident = (rec.get("identifier") or "").strip().lower()
+    if ident:
+        return "i:" + ident
+    name = (rec.get("name") or "").strip().lower()
+    area = (rec.get("area") or "").strip().lower()
+    return "n:" + name + "|" + area
+
+
+def import_clients(shop_id: int, rows: list[list[str]], mapping: dict[str, int],
+                   options: dict | None = None, actor: str = "") -> dict:
+    """Import client records in chunks, with dedupe and a per-row report.
+
+    Returns counts plus a report of the first N rejected rows so the operator
+    can fix their spreadsheet rather than guessing why half of it vanished.
+    """
+    from . import care, privacy
+
+    opts = options or {}
+    update_existing = bool(opts.get("update_existing", True))
+    schedule_recalls = bool(opts.get("schedule_recalls", True))
+    default_branch = opts.get("branch_id") or None
+    default_branch_label = (opts.get("branch_label") or "")[:80]
+
+    records = []
+    for r in rows:
+        def g(field):
+            i = mapping.get(field)
+            return (str(r[i]).strip() if i is not None and i < len(r) else "")
+        rec = {k: g(k) for k in mapping}
+        if not any(rec.values()):
+            continue
+        records.append(rec)
+
+    checked = validate_client_records(records)
+
+    # existing identities in this shop
+    existing = {}
+    for row in db.q("""SELECT id, COALESCE(phone,'') phone, COALESCE(identifier,'') identifier,
+                              COALESCE(name,'') name, COALESCE(area,'') area
+                       FROM clients WHERE shop_id=?""", (shop_id,)):
+        existing[fingerprint({"phone": row["phone"], "identifier": row["identifier"],
+                              "name": row["name"], "area": row["area"]})] = row["id"]
+
+    services = {s["name"].strip().lower(): s for s in care.list_services(shop_id)}
+    by_dept = {}
+    for s in services.values():
+        dept = (s.get("department") or "").strip().lower()
+        if dept and dept not in by_dept:
+            by_dept[dept] = s
+
+    created = updated = skipped = 0
+    recalls_made = 0
+    seen_this_file: set[str] = set()
+    report: list[dict] = []
+    # Every row that does not end up as a client must say why, or the operator
+    # cannot fix their spreadsheet and silently loses records.
+    for rec in checked:
+        if not rec["ok"]:
+            report.append({"row": rec["_row"], "name": rec["name"],
+                           "status": "rejected", "why": "; ".join(rec["problems"])})
+
+    for rec in checked:
+        if not rec["ok"]:
+            skipped += 1
+            continue
+        fp = fingerprint(rec)
+        if fp in seen_this_file:
+            skipped += 1
+            if len(report) < 200:
+                report.append({"row": rec["_row"], "name": rec["name"],
+                               "status": "duplicate", "why": "repeated inside this file"})
+            continue
+        seen_this_file.add(fp)
+
+        payload = {
+            "shop_id": shop_id,
+            "name": rec["name"][:160],
+            "phone": rec.get("phone", "")[:40],
+            "whatsapp": rec.get("phone", "")[:40],
+            "email": (rec.get("email") or "")[:160],
+            "area": (rec.get("area") or "")[:80],
+            "branch_id": default_branch,
+            "branch_label": (rec.get("branch_label") or default_branch_label)[:80],
+            "dob": (rec.get("dob") or "")[:20],
+            "identifier": (rec.get("identifier") or "")[:80],
+            "condition": (rec.get("condition") or "")[:400],
+            "tags": (rec.get("tags") or "")[:200],
+            "language": "en",
+            "opted_in": 1,
+            "consent_source": "import",
+            "updated_at": db.now_iso(),
+        }
+        if rec.get("last_visit_at"):
+            payload["last_visit_at"] = rec["last_visit_at"][:10]
+        if rec.get("last_service"):
+            payload["last_service"] = rec["last_service"][:120]
+        try:
+            if rec.get("visits_count"):
+                payload["visits_count"] = int(float(rec["visits_count"]))
+        except (TypeError, ValueError):
+            pass
+
+        cid = existing.get(fp)
+        if cid:
+            if update_existing:
+                db.update("clients", cid, privacy.seal_record(payload))
+                updated += 1
+            else:
+                skipped += 1
+            continue
+        payload["created_at"] = db.now_iso()
+        payload["visits_count"] = payload.get("visits_count", 0)
+        try:
+            cid = int(db.insert("clients", privacy.seal_record(payload)))
+        except Exception as e:  # noqa: BLE001
+            skipped += 1
+            if len(report) < 200:
+                report.append({"row": rec["_row"], "name": rec["name"],
+                               "status": "error", "why": f"{type(e).__name__}: {e}"[:160]})
+            continue
+        existing[fp] = cid
+        created += 1
+
+        # schedule a recall if the row tells us a service and a next date
+        if schedule_recalls:
+            svc = None
+            label = (rec.get("last_service") or rec.get("condition") or "").strip().lower()
+            if label:
+                svc = services.get(label) or by_dept.get(label)
+            if svc and rec.get("next_due_on"):
+                db.insert("recalls", {
+                    "shop_id": shop_id, "client_id": cid,
+                    "service_id": svc["id"], "service_name": svc["name"][:120],
+                    "branch_id": default_branch,
+                    "due_on": rec["next_due_on"][:10], "status": "due",
+                    "created_at": db.now_iso(), "updated_at": db.now_iso(),
+                })
+                db.x("UPDATE clients SET next_due_on=? WHERE id=?",
+                     (rec["next_due_on"][:10], cid))
+                recalls_made += 1
+            elif svc and svc.get("recall_days") and rec.get("last_visit_at"):
+                due = care.schedule_recall(shop_id, cid, svc, rec["last_visit_at"][:10], actor)
+                if due:
+                    db.x("UPDATE clients SET next_due_on=? WHERE id=?", (due, cid))
+                    recalls_made += 1
+
+    job = db.insert("import_jobs", {
+        "shop_id": shop_id, "kind": "clients", "filename": (opts.get("filename") or "")[:160],
+        "rows_total": len(checked), "rows_ok": created + updated, "rows_failed": skipped,
+        "status": "done", "report": json.dumps(report)[:200000],
+        "created_at": db.now_iso(),
+    })
+    privacy.log_access(actor or "system", shop_id, 0, "import",
+                       f"client import: {created} created, {updated} updated, {skipped} skipped",
+                       "", "")
+    return {"ok": True, "job_id": job, "rows_found": len(checked), "created": created,
+            "updated": updated, "skipped": skipped, "recalls_scheduled": recalls_made,
+            "report": report[:100], "report_truncated": len(report) >= 200}

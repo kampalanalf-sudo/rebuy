@@ -48,7 +48,7 @@ def _bootstrap() -> None:
     # Every module that registers @route must be imported here. A module that is
     # not imported simply 404s in production while working locally, because the
     # local server imports them from httpd.run(). api_native was missed once.
-    from app import api, api_admin, api_native, webhooks  # noqa: F401,E402  (register routes)
+    from app import api, api_admin, api_care, api_native, webhooks  # noqa: F401,E402  (register routes)
     try:
         from app import seed
 

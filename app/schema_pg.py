@@ -512,6 +512,108 @@ STATEMENTS = [
   FROM sales
   WHERE sale_date >= to_char((now() AT TIME ZONE 'Africa/Kampala')::date - 30, 'YYYY-MM-DD')
   GROUP BY shop_id""",
+    # ---------------------------------------------------------- clinical / care
+    """CREATE TABLE IF NOT EXISTS clients (
+  id             BIGSERIAL PRIMARY KEY,
+  shop_id        BIGINT NOT NULL,
+  customer_id    BIGINT,
+  branch_id      BIGINT,
+  name           TEXT NOT NULL,
+  phone          TEXT DEFAULT '',
+  whatsapp       TEXT DEFAULT '',
+  email          TEXT DEFAULT '',
+  area           TEXT DEFAULT '',
+  branch_label   TEXT DEFAULT '',
+  dob            TEXT DEFAULT '',
+  identifier     TEXT DEFAULT '',
+  condition      TEXT DEFAULT '',
+  address        TEXT DEFAULT '',
+  notes          TEXT DEFAULT '',
+  tags           TEXT DEFAULT '',
+  language       TEXT DEFAULT 'en',
+  opted_in       SMALLINT DEFAULT 1 CHECK (opted_in IN (0,1)),
+  consent_source TEXT DEFAULT 'import',
+  opted_out_at   TEXT,
+  last_visit_at  TEXT,
+  last_service   TEXT DEFAULT '',
+  next_due_on    TEXT,
+  visits_count   INTEGER DEFAULT 0,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_clients_shop ON clients(shop_id, name)",
+    "CREATE INDEX IF NOT EXISTS ix_clients_branch ON clients(shop_id, branch_id)",
+    "CREATE INDEX IF NOT EXISTS ix_clients_phone ON clients(shop_id, phone)",
+
+    """CREATE TABLE IF NOT EXISTS services (
+  id            BIGSERIAL PRIMARY KEY,
+  shop_id       BIGINT NOT NULL,
+  name          TEXT NOT NULL,
+  department    TEXT DEFAULT '',
+  recall_days   INTEGER DEFAULT 0,
+  price         DOUBLE PRECISION DEFAULT 0,
+  currency      TEXT DEFAULT 'UGX',
+  active        SMALLINT DEFAULT 1 CHECK (active IN (0,1)),
+  created_at    TEXT NOT NULL
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_services_shop ON services(shop_id, name)",
+
+    """CREATE TABLE IF NOT EXISTS recalls (
+  id            BIGSERIAL PRIMARY KEY,
+  shop_id       BIGINT NOT NULL,
+  client_id     BIGINT NOT NULL,
+  service_id    BIGINT,
+  service_name  TEXT DEFAULT '',
+  branch_id     BIGINT,
+  due_on        TEXT NOT NULL,
+  status        TEXT DEFAULT 'due',
+  completed_on  TEXT,
+  reminder_id   BIGINT,
+  notes         TEXT DEFAULT '',
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_recalls_due ON recalls(shop_id, status, due_on)",
+    "CREATE INDEX IF NOT EXISTS ix_recalls_client ON recalls(client_id, due_on)",
+
+    """CREATE TABLE IF NOT EXISTS client_visits (
+  id            BIGSERIAL PRIMARY KEY,
+  shop_id       BIGINT NOT NULL,
+  client_id     BIGINT NOT NULL,
+  branch_id     BIGINT,
+  service_id    BIGINT,
+  service_name  TEXT DEFAULT '',
+  visited_on    TEXT NOT NULL,
+  clinician     TEXT DEFAULT '',
+  amount        DOUBLE PRECISION DEFAULT 0,
+  notes         TEXT DEFAULT '',
+  created_at    TEXT NOT NULL
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_client_visits ON client_visits(shop_id, visited_on)",
+
+    """CREATE TABLE IF NOT EXISTS access_log (
+  id          BIGSERIAL PRIMARY KEY,
+  shop_id     BIGINT NOT NULL,
+  actor       TEXT DEFAULT '',
+  client_id   BIGINT DEFAULT 0,
+  action      TEXT DEFAULT '',
+  detail      TEXT DEFAULT '',
+  ip          TEXT DEFAULT '',
+  user_agent  TEXT DEFAULT '',
+  created_at  TEXT NOT NULL
+)""",
+    "CREATE INDEX IF NOT EXISTS ix_access_log ON access_log(shop_id, created_at)",
+
+    """CREATE TABLE IF NOT EXISTS message_audit (
+  id          BIGSERIAL PRIMARY KEY,
+  shop_id     BIGINT NOT NULL,
+  client_id   BIGINT DEFAULT 0,
+  channel     TEXT DEFAULT '',
+  excerpt     TEXT DEFAULT '',
+  redacted    SMALLINT DEFAULT 0 CHECK (redacted IN (0,1)),
+  blocked     SMALLINT DEFAULT 0 CHECK (blocked IN (0,1)),
+  created_at  TEXT NOT NULL
+)""",
 ]
 
 # Ids are inserted explicitly during seeding; bump every sequence past the data.

@@ -3,3 +3,7 @@
 # and there is a built-in fallback reader when it is missing.
 openpyxl>=3.1.2
 psycopg2-binary>=2.9.9 ; python_version >= "3.8"
+# Field-level encryption for clinical client records (app/privacy.py).
+# Optional at runtime: without it the app still runs, but sensitive client
+# fields are stored in the clear and the admin UI says so loudly.
+cryptography>=41.0.0

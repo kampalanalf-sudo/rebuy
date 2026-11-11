@@ -20,7 +20,7 @@ import random
 import re
 from datetime import datetime, timedelta
 
-from . import db, geo, providers
+from . import db, geo, privacy, providers
 
 FMT = "%Y-%m-%d %H:%M:%S"
 DFMT = "%Y-%m-%d"
@@ -540,6 +540,19 @@ def _deliver_queued(stats: dict, limit: int) -> None:
     queued = db.q("SELECT * FROM messages WHERE status='queued' ORDER BY id LIMIT ?", (limit * 3,))
     for m in queued:
         shop = db.q1("SELECT * FROM shops WHERE id=?", (m["shop_id"],))
+        # Clinical-vocabulary guard. A recall reminder may say "you are due for
+        # a dental check-up"; it may never carry a diagnosis, a test result or
+        # an HIV/TB status, because those messages are read on shared phones and
+        # can do real harm. Anything flagged is held, not sent, and logged.
+        findings = privacy.scrub_findings(m["body"] or "")
+        if findings:
+            db.update("messages", m["id"], {
+                "status": "blocked",
+                "error": "clinical terms withheld: " + ", ".join(findings),
+            })
+            privacy.log_outbound(m["shop_id"], m.get("customer_id"), m["channel"],
+                                 m["body"] or "", scrubbed=True, blocked=True)
+            continue
         driver, cfg = providers.credentials_for(m["shop_id"], m["channel"])
         try:
             if m["channel"] == "whatsapp":
@@ -552,6 +565,11 @@ def _deliver_queued(stats: dict, limit: int) -> None:
         except Exception as e:  # noqa: BLE001
             res = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         if res.get("ok"):
+            try:
+                privacy.log_outbound(m["shop_id"], m.get("customer_id"), m["channel"],
+                                     m["body"] or "", scrubbed=False, blocked=False)
+            except Exception:  # noqa: BLE001
+                pass
             db.update("messages", m["id"], {
                 "status": "sent", "provider": res.get("provider", driver),
                 "provider_msg_id": res.get("message_id", ""), "sent_at": db.now_iso(),

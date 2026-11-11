@@ -310,6 +310,10 @@ const NAV = [
   {r: "/dashboard", label: "Dashboard", ic: "◎"},
   {r: "/inbox", label: "Inbox", ic: "✉", badgeKey: "unread"},
   {r: "/reminders", label: "Reminders", ic: "⏰", badgeKey: "due_reminders"},
+  {sec: "Clients"},
+  {r: "/clients", label: "Client records", ic: "♟"},
+  {r: "/recalls", label: "Recalls due", ic: "⏱", badgeKey: "care_due"},
+  {r: "/retention", label: "Retention", ic: "◑"},
   {sec: "Customers"},
   {r: "/customers", label: "Customers", ic: "☺"},
   {r: "/segments", label: "Segments", ic: "◫"},
@@ -379,6 +383,9 @@ const PAGES = {
   "/dashboard": ["Dashboard", "Your shop at a glance — revenue, outreach and customer health."],
   "/inbox": ["Inbox", "Every customer reply in one place."],
   "/reminders": ["Reminder queue", "What Rebuy is about to send, and what it already sent."],
+  "/clients": ["Client records", "Every client, their service history and when they are next due."],
+  "/recalls": ["Recalls due", "Clients whose service is due — message them or mark them seen."],
+  "/retention": ["Retention", "How many clients who came due actually came back, by service and branch."],
   "/customers": ["Customers", "Everyone who has bought from you, with their restock health."],
   "/segments": ["Segments & campaigns", "Group customers and message them in bulk."],
   "/loyalty": ["Loyalty", "Reward the customers who keep coming back."],
@@ -978,6 +985,172 @@ async function doSimulate(cid) {
 
 /* ===================================================================== CUSTOMERS */
 let CUST = {page: 1, search: "", risk: "", sort: "recent"};
+/* ======================================================== CLINICAL / CARE */
+
+let _careTab = "clients";
+
+function careFileToData(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error("could not read that file"));
+    r.readAsDataURL(file);
+  });
+}
+
+async function careUpload(input, preview) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const slot = $("#careImportResult");
+  slot.innerHTML = `<div class="muted tiny mt8">Reading ${esc(f.name)}…</div>`;
+  try {
+    const data = await careFileToData(f);
+    const r = await api("/api/care/import/preview", {method: "POST", body: {filename: f.name, data}});
+    const map = Object.entries(r.mapping).map(([k, v]) => `<span class="badge">${esc(k)} ← ${esc(v)}</span>`).join(" ");
+    slot.innerHTML = `<div class="card mt12"><div class="hd"><h3>Check before importing</h3>
+        <div class="grow"></div><span class="badge">${r.rows_found} rows</span></div><div class="bd">
+      <div class="tiny muted">We matched these columns:</div>
+      <div class="mt8" style="display:flex;gap:6px;flex-wrap:wrap">${map || "<i>no columns matched</i>"}</div>
+      ${r.unmapped_columns && r.unmapped_columns.length ? `<div class="tiny muted mt8">Ignored columns: ${r.unmapped_columns.map(esc).join(", ")}</div>` : ""}
+      ${r.would_reject ? `<div class="banner bad mt12">${r.would_reject} of the first ${Math.min(r.rows_found,500)} rows would be skipped.</div>
+        <div class="tiny muted mt8">${r.reject_examples.map(e => `row ${e.row}: ${esc(e.why)}`).join("<br>")}</div>` : ""}
+      <div class="tiny muted mt12">These fields are encrypted the moment they land: ${r.will_encrypt.map(esc).join(", ")}.</div>
+      <button class="btn primary mt12" style="width:100%;justify-content:center" onclick="careCommit('${esc(f.name)}')">Import ${r.rows_found} client records</button>
+    </div></div>`;
+    window._carePending = data;
+  } catch (e) {
+    slot.innerHTML = `<div class="banner bad mt12">${esc(e.message)}</div>`;
+  }
+}
+
+async function careCommit(filename) {
+  const data = window._carePending;
+  if (!data) return;
+  const slot = $("#careImportResult");
+  slot.innerHTML = `<div class="muted tiny mt8">Importing… this can take a moment for large files.</div>`;
+  try {
+    const r = await api("/api/care/import", {method: "POST",
+      body: {filename, data, update_existing: true, schedule_recalls: true}});
+    slot.innerHTML = `<div class="card mt12"><div class="bd">
+      <b>${r.created} clients added</b>, ${r.updated} updated, ${r.skipped} skipped.
+      ${r.recalls_scheduled ? `<div class="tiny muted mt8">${r.recalls_scheduled} recall${r.recalls_scheduled === 1 ? "" : "s"} scheduled from the dates in your file.</div>` : ""}
+      ${r.skipped ? `<div class="tiny muted mt8">${r.report.slice(0,8).map(e => `row ${e.row}: ${esc(e.why || e.status)}`).join("<br>")}</div>` : ""}
+      <a class="btn mt12" style="width:100%;justify-content:center" href="#/clients" onclick="setTimeout(()=>location.reload(),50)">See the client list →</a>
+    </div></div>`;
+    window._carePending = null;
+  } catch (e) {
+    slot.innerHTML = `<div class="banner bad mt12">${esc(e.message)}</div>`;
+  }
+}
+
+page("/clients", {}, async () => {
+  const q = new URLSearchParams(S.query || "").get("q") || "";
+  const d = await api("/api/care/clients?limit=100" + (q ? "&q=" + encodeURIComponent(q) : ""));
+  const ov = await api("/api/care/overview");
+  const rows = d.rows || [];
+  return shell(`<div class="grid g21">
+    <div>
+      <div class="card"><div class="hd"><h3>Client records</h3><div class="grow"></div>
+        <span class="badge">${d.total || 0} clients</span></div>
+        <div class="bd" style="padding:12px 16px">
+          <form onsubmit="event.preventDefault();location.hash='#/clients?q='+encodeURIComponent(this.q.value)">
+            <input class="input" name="q" placeholder="Search name, phone, file number…" value="${esc(q)}"></form>
+        </div>
+        ${rows.length ? `<div class="bd" style="padding:0 16px 8px">
+          ${rows.map(c => `<div class="recent-li" style="padding:11px 0;border-bottom:1px solid var(--line,#eee)">
+            <div class="avatar" style="background:#eef;color:#557;border-radius:8px">${esc((c.name || "?")[0].toUpperCase())}</div>
+            <div class="grow"><div class="nm">${esc(c.name)}</div>
+              <div class="ss">${esc(c.phone || "no phone")}${c.branch_label ? " · " + esc(c.branch_label) : ""}${c.last_service ? " · " + esc(c.last_service) : ""}</div></div>
+            <div style="text-align:right">
+              ${c.next_due_on ? `<div class="tiny ${c.next_due_on <= new Date().toISOString().slice(0,10) ? "bad" : "muted"}">due ${esc(c.next_due_on)}</div>` : `<div class="tiny muted">no recall</div>`}
+              ${c.opted_in ? "" : `<div class="tiny muted">opted out</div>`}
+            </div>
+          </div>`).join("")}
+        </div>` : `<div class="bd"><div class="muted">No clients yet. Upload your register below.</div></div>`}
+      </div>
+    </div>
+    <div>
+      <div class="card"><div class="hd"><h3>Upload client records</h3></div><div class="bd">
+        <div class="tiny muted">CSV or Excel from your patient register. We match columns like
+          <i>Patient Name, Phone, File No, Date of Birth, Branch, Service, Last Visit, Next Appointment</i>
+          automatically.</div>
+        <input type="file" id="careFile" accept=".csv,.xlsx,.xls,.txt" class="mt12" style="width:100%"
+               onchange="careUpload(this)">
+        <div id="careImportResult"></div>
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>At a glance</h3></div><div class="bd">
+        <div class="spread"><span class="muted">Clients</span><b>${ov.clients}</b></div>
+        <div class="spread mt8"><span class="muted">Services</span><b>${ov.services}</b></div>
+        <div class="spread mt8"><span class="muted">Branches</span><b>${ov.branches}</b></div>
+        <div class="spread mt8"><span class="muted">Due today</span><b>${ov.due_today}</b></div>
+        <div class="spread mt8"><span class="muted">Overdue</span><b class="${ov.overdue ? "bad" : ""}">${ov.overdue}</b></div>
+        <div class="hr"></div>
+        <div class="tiny muted">🔒 ${esc(ov.privacy.encryption)}</div>
+        <a class="btn mt12" style="width:100%;justify-content:center" href="/api/care/export">Export client list (CSV)</a>
+        <div class="tiny muted mt8">Exports are recorded in the access log.</div>
+      </div></div>
+    </div>
+  </div>`);
+});
+
+page("/recalls", {}, async () => {
+  const d = await api("/api/care/recalls?status=due&limit=200");
+  const rows = d.rows || [];
+  return shell(`<div class="card"><div class="hd"><h3>Recalls due</h3><div class="grow"></div>
+      <span class="badge">${rows.length}</span></div>
+    <div class="bd" style="padding:${rows.length ? "4px 16px" : "18px"}">
+      ${rows.length ? rows.map(r => `<div class="recent-li" style="padding:12px 0;border-bottom:1px solid var(--line,#eee)">
+        <div class="avatar" style="background:#ffefef;color:#a33;border-radius:8px">⏱</div>
+        <div class="grow"><div class="nm">${esc(r.client_name)}</div>
+          <div class="ss">${esc(r.service_name || "service")}${r.branch_label ? " · " + esc(r.branch_label) : ""} · due ${esc(r.due_on)}</div></div>
+        <div class="row" style="gap:6px">
+          <button class="btn sm" onclick="careMark(${r.id},'booked')">Booked</button>
+          <button class="btn sm primary" onclick="careMark(${r.id},'completed')">Seen</button>
+        </div>
+      </div>`).join("") : `<div class="muted">Nothing due. New recalls appear here as visits are recorded.</div>`}
+    </div></div>`);
+});
+
+async function careMark(id, status) {
+  try { await api("/api/care/recalls/" + id, {method: "POST", body: {status}});
+    toast(status === "completed" ? "Marked as seen" : "Marked as booked", "ok");
+    location.reload();
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+page("/retention", {}, async () => {
+  const r = await api("/api/care/retention?days=365");
+  const bar = (v) => `<div style="height:6px;background:#eee;border-radius:4px;overflow:hidden">
+      <i style="display:block;height:100%;width:${Math.max(2, Math.min(100, v))}%;background:${v >= 60 ? "#0d9f6e" : v >= 30 ? "#e6a700" : "#d33"}"></i></div>`;
+  return shell(`<div class="grid g21">
+    <div>
+      <div class="card"><div class="bd">
+        <div style="font-size:34px;font-weight:750;letter-spacing:-1px">${r.retention_rate}%</div>
+        <div class="muted">of clients who came due came back (last ${r.window_days} days)</div>
+        <div class="hr"></div>
+        <div class="spread"><span class="muted">Recalls due</span><b>${r.recalls_due}</b></div>
+        <div class="spread mt8"><span class="muted">Came back</span><b>${r.completed}</b></div>
+        <div class="spread mt8"><span class="muted">Booked, not yet seen</span><b>${r.booked}</b></div>
+        <div class="spread mt8"><span class="muted">Missed</span><b>${r.missed}</b></div>
+        <div class="spread mt8"><span class="muted">Lapsed (&gt;180 days)</span><b>${r.lapsed_clients}</b></div>
+        <div class="spread mt8"><span class="muted">Opted out</span><b>${r.opted_out}</b></div>
+      </div></div>
+    </div>
+    <div>
+      <div class="card"><div class="hd"><h3>By service</h3></div><div class="bd">
+        ${(r.by_service || []).map(s => `<div style="margin-bottom:12px">
+          <div class="spread tiny"><span>${esc(s.service_name || "—")}</span><span>${s.came_back}/${s.due} · ${s.rate}%</span></div>
+          ${bar(s.rate)}</div>`).join("") || `<div class="muted">No recall history yet.</div>`}
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>By branch</h3></div><div class="bd">
+        ${(r.by_branch || []).map(s => `<div style="margin-bottom:12px">
+          <div class="spread tiny"><span>${esc(s.branch)}</span><span>${s.came_back}/${s.due} · ${s.rate}%</span></div>
+          ${bar(s.rate)}</div>`).join("") || `<div class="muted">No branch history yet.</div>`}
+      </div></div>
+    </div>
+  </div>`);
+});
+
 page("/customers", {}, async (ctx) => {
   if (ctx.rest[0]) return customerDetail(Number(ctx.rest[0]));
   const q = new URLSearchParams({page: CUST.page, per: 25, search: CUST.search, risk: CUST.risk, sort: CUST.sort});

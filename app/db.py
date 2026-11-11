@@ -227,6 +227,120 @@ CREATE TABLE IF NOT EXISTS shop_places (          -- physical branches, geofence
 );
 CREATE INDEX IF NOT EXISTS idx_places_shop ON shop_places(shop_id);
 
+-- ============================================================ clinical / care
+-- A hospital-style tenant: clients (not "customers"), the specialised services
+-- they are enrolled in, and the recall dates those services generate. Client
+-- rows are shared with the retail app: `clients` carries the clinical fields
+-- that must never sit in a plain sales table.
+
+CREATE TABLE IF NOT EXISTS clients (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id        INTEGER NOT NULL,
+  customer_id    INTEGER,                        -- link to customers row when one exists
+  branch_id      INTEGER,                        -- shop_places.id
+  name           TEXT NOT NULL,
+  phone          TEXT DEFAULT '',
+  whatsapp       TEXT DEFAULT '',
+  email          TEXT DEFAULT '',
+  area           TEXT DEFAULT '',
+  branch_label   TEXT DEFAULT '',
+  dob            TEXT DEFAULT '',                -- encrypted
+  identifier     TEXT DEFAULT '',                -- encrypted: file/patient number
+  condition      TEXT DEFAULT '',                -- encrypted: free-text clinical note
+  address        TEXT DEFAULT '',                -- encrypted
+  notes          TEXT DEFAULT '',                -- encrypted
+  tags           TEXT DEFAULT '',
+  language       TEXT DEFAULT 'en',
+  opted_in       INTEGER DEFAULT 1,              -- messaging consent
+  consent_source TEXT DEFAULT 'import',
+  opted_out_at   TEXT,
+  last_visit_at  TEXT,
+  last_service   TEXT DEFAULT '',
+  next_due_on    TEXT,                           -- soonest open recall
+  visits_count   INTEGER DEFAULT 0,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_clients_shop ON clients(shop_id, name);
+CREATE INDEX IF NOT EXISTS ix_clients_branch ON clients(shop_id, branch_id);
+CREATE INDEX IF NOT EXISTS ix_clients_phone ON clients(shop_id, phone);
+
+CREATE TABLE IF NOT EXISTS services (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id       INTEGER NOT NULL,
+  name          TEXT NOT NULL,                   -- e.g. "Dental scaling"
+  department    TEXT DEFAULT '',                 -- e.g. "Dental", "Antenatal"
+  recall_days   INTEGER DEFAULT 0,               -- 0 = one-off, no recall
+  price         REAL DEFAULT 0,
+  currency      TEXT DEFAULT 'UGX',
+  active        INTEGER DEFAULT 1,
+  created_at    TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_services_shop ON services(shop_id, name);
+
+CREATE TABLE IF NOT EXISTS recalls (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id       INTEGER NOT NULL,
+  client_id     INTEGER NOT NULL,
+  service_id    INTEGER,
+  service_name  TEXT DEFAULT '',
+  branch_id     INTEGER,
+  due_on        TEXT NOT NULL,
+  status        TEXT DEFAULT 'due',              -- due | booked | completed | missed | cancelled
+  completed_on  TEXT,
+  reminder_id   INTEGER,                         -- the reminder that carried it
+  notes         TEXT DEFAULT '',
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_recalls_due ON recalls(shop_id, status, due_on);
+CREATE INDEX IF NOT EXISTS ix_recalls_client ON recalls(client_id, due_on);
+
+CREATE TABLE IF NOT EXISTS client_visits (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id       INTEGER NOT NULL,
+  client_id     INTEGER NOT NULL,
+  branch_id     INTEGER,
+  service_id    INTEGER,
+  service_name  TEXT DEFAULT '',
+  visited_on    TEXT NOT NULL,
+  clinician     TEXT DEFAULT '',
+  amount        REAL DEFAULT 0,
+  notes         TEXT DEFAULT '',                 -- encrypted
+  created_at    TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_client_visits ON client_visits(shop_id, visited_on);
+
+CREATE TABLE IF NOT EXISTS access_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id     INTEGER NOT NULL,
+  actor       TEXT DEFAULT '',
+  client_id   INTEGER DEFAULT 0,
+  action      TEXT DEFAULT '',                   -- view | export | import | update | delete
+  detail      TEXT DEFAULT '',
+  ip          TEXT DEFAULT '',
+  user_agent  TEXT DEFAULT '',
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_access_log ON access_log(shop_id, created_at);
+
+CREATE TABLE IF NOT EXISTS message_audit (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id     INTEGER NOT NULL,
+  client_id   INTEGER DEFAULT 0,
+  channel     TEXT DEFAULT '',
+  excerpt     TEXT DEFAULT '',
+  redacted    INTEGER DEFAULT 0,
+  blocked     INTEGER DEFAULT 0,
+  created_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS consents (             -- one row per customer per purpose
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_id INTEGER NOT NULL,

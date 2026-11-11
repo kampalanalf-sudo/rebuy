@@ -363,6 +363,7 @@ def run(host: str = "0.0.0.0", port: int = 8000):
     db.init_schema()
     from . import api  # noqa: F401  (registers routes)
     from . import api_admin  # noqa: F401
+    from . import api_care  # noqa: F401  (clinical clients, services, recalls)
     from . import api_native  # noqa: F401  (native app + geofence routes)
     from . import webhooks  # noqa: F401  (registers webhook + cron routes)
     from . import seed

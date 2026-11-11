@@ -112,6 +112,14 @@ SEED_DEMO = (not IS_PROD) and _bool("REBUY_SEED_DEMO", default=True)
 
 COOKIE_SECURE = _bool("REBUY_COOKIE_SECURE", default=IS_PROD)
 COOKIE_NAME = "rebuy_session"
+
+# ---------------------------------------------------------------- privacy
+# A clinic's client list is medical data. Sensitive client fields are encrypted
+# at rest with a key derived from this value, so keep it stable: rotating it
+# makes existing encrypted fields unreadable.
+PRIVACY_KEY = os.environ.get("REBUY_PRIVACY_KEY", "")
+# Escape hatch for local development only; never set this in production.
+PRIVACY_PLAINTEXT = _bool("REBUY_PRIVACY_PLAINTEXT", default=False)
 COOKIE_SAMESITE = "Lax"
 SESSION_DAYS = 14
 
