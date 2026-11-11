@@ -85,6 +85,36 @@ echo "$INS" | grep -q '"consent"' \
 t "$(code -X POST "$B/api/native/location" -H 'content-type: application/json' -d '{"lat":0.34,"lng":32.58,"accuracy":30}')" 401 "location needs a paired device"
 t "$(code -X POST "$B/api/native/pair" -H 'content-type: application/json' -d '{"code":"000000"}')" 400 "bad pairing code rejected"
 
+# --- location trust guard -------------------------------------------------
+# A coarse fix must never be acted on. This guard was silently dead once,
+# because the parser read "accuracy_m" while clients send "accuracy": every
+# fix therefore looked perfect and the guard never fired.
+SLUG=$(curl -s -b "$C" "$B/api/shop" | sed -n 's/.*"slug": *"\([^"]*\)".*/\1/p' | head -1)
+PHONE="+25677$(date +%s | tail -c 7)"
+curl -s -b "$C" -X POST "$B/api/customers" -H 'content-type: application/json' \
+  -d "{\"name\":\"Smoke Shopper\",\"phone\":\"$PHONE\",\"opted_in\":true}" -o /dev/null
+PAIR=$(curl -s -X POST "$B/api/native/pair" -H 'content-type: application/json' \
+  -d "{\"shop_slug\":\"$SLUG\",\"phone\":\"$PHONE\",\"platform\":\"android\"}")
+DTOK=$(echo "$PAIR" | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' | head -1)
+AUTH="authorization: Bearer $DTOK"
+t "$([ -n "$DTOK" ] && echo 1 || echo 0)" 1 "device pairs and receives a token"
+curl -s -X POST "$B/api/native/consent" -H "$AUTH" -H 'content-type: application/json' \
+  -d '{"purpose":"location","granted":true}' -o /dev/null
+COARSE=$(curl -s -X POST "$B/api/native/location" -H "$AUTH" -H 'content-type: application/json' \
+  -d '{"lat":0.3476,"lng":32.5825,"accuracy":2000}')
+echo "$COARSE" | grep -q '"used": false' \
+  && { P=$((P+1)); printf "  \033[32mPASS\033[0m coarse fix is refused\n"; } \
+  || { F=$((F+1)); printf "  \033[31mFAIL\033[0m coarse fix is refused (got %s)\n" "$COARSE"; }
+echo "$COARSE" | grep -q 'too imprecise' \
+  && { P=$((P+1)); printf "  \033[32mPASS\033[0m refusal names the accuracy\n"; } \
+  || { F=$((F+1)); printf "  \033[31mFAIL\033[0m refusal names the accuracy\n"; }
+GOOD=$(curl -s -X POST "$B/api/native/location" -H "$AUTH" -H 'content-type: application/json' \
+  -d '{"lat":0.3476,"lng":32.5825,"accuracy":20}')
+echo "$GOOD" | grep -q '"used": true' \
+  && { P=$((P+1)); printf "  \033[32mPASS\033[0m accurate fix is used\n"; } \
+  || { F=$((F+1)); printf "  \033[31mFAIL\033[0m accurate fix is used (got %s)\n" "$GOOD"; }
+
+
 echo "== logout =="
 curl -s -b "$C" -X POST "$B/api/auth/logout" -o /dev/null
 t "$(code -b "$C" "$B/api/shop")" 401 "session dead after logout"

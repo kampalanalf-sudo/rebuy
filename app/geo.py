@@ -110,8 +110,12 @@ def parse_fix(body: dict) -> dict:
         raise ValueError("lat/lng out of range")
     if lat == 0 and lng == 0:
         raise ValueError("lat/lng is the null island — no fix yet")
+    # Clients send "accuracy" (the browser/OS field name); some send "accuracy_m".
+    # Accept either. Getting this wrong is not cosmetic: accuracy defaults to 0,
+    # which reads as a perfect fix and disables the coarse-fix guard entirely.
     try:
-        acc = float(body.get("accuracy_m") or 0)
+        acc = float(body.get("accuracy_m") if body.get("accuracy_m") not in (None, "")
+                    else (body.get("accuracy") or 0))
     except (TypeError, ValueError):
         acc = 0.0
     return {

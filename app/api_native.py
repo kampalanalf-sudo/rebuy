@@ -153,12 +153,16 @@ def native_location(ctx):
     if not shop:
         raise ApiError("Shop not found", 404)
 
-    db.update("devices", device["id"], {"lat": fix["lat"], "lng": fix["lng"],
-                                        "accuracy_m": fix["accuracy_m"],
-                                        "last_seen_at": db.now_iso()})
+    # Trust is decided BEFORE the device row is rewritten. Writing the fix first
+    # would replace the previous position with the coarse one, so the next
+    # enter/exit comparison would be made against a 2 km lie.
     trusted, why = geo.trust_fix(fix, device.get("last_seen_at") or "")
     if not trusted:
         return {"ok": True, "used": False, "reason": why}
+
+    db.update("devices", device["id"], {"lat": fix["lat"], "lng": fix["lng"],
+                                        "accuracy_m": fix["accuracy_m"],
+                                        "last_seen_at": db.now_iso()})
 
     if not nudges.has_consent(customer["id"], "location"):
         return {"ok": True, "used": False, "reason": "no location consent"}
@@ -166,7 +170,9 @@ def native_location(ctx):
     prev_lat, prev_lng = device.get("lat"), device.get("lng")
     places = db.q("SELECT * FROM shop_places WHERE shop_id=? AND active=1", (shop["id"],))
     if not places:
-        return {"ok": True, "used": True, "geofence": "no branch configured"}
+        return {"ok": True, "used": True, "inside": False, "place": "", "event": "",
+                "distance_m": None, "offer": None, "decided": False,
+                "reason": "the shop has no branch location set up yet"}
 
     nearest, nearest_d = None, None
     for p in places:
