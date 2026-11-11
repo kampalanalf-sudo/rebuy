@@ -34,7 +34,7 @@ import json
 import re
 import secrets
 
-from . import auth, config, db, engine, geo, nudges
+from . import auth, config, db, engine, geo, nudges, providers
 from .httpd import ApiError, route
 
 PAIR_TTL_DAYS = 180
@@ -77,6 +77,16 @@ def pair(ctx):
     A 6-digit code delivered by SMS/WhatsApp is the production upgrade; until
     a provider is configured the exchange is allowed only outside production.
     """
+    # A phone number on file is a weak secret: it is printed on receipts and
+    # shared with cashiers. Until a code is actually delivered to the phone, a
+    # pairing attempt proves only that someone knows a number, so it is refused
+    # in production rather than shipping as if it were authentication.
+    if config.IS_PROD:
+        driver, _cfg = providers.credentials_for(None, "sms")
+        if driver == "sandbox":
+            raise ApiError("App pairing is not open yet — it needs a verification code by SMS",
+                           503, "pairing_closed")
+
     slug = (ctx.b("shop_slug") or "").strip().lower()
     phone = re.sub(r"[^0-9+]", "", (ctx.b("phone") or ""))
     if not slug or len(phone) < 9:

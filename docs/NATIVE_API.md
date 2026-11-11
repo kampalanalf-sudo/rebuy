@@ -40,12 +40,24 @@ deliberate: pairing cannot be used to create accounts or to discover whether an
 arbitrary number is a customer of an arbitrary shop, because a failed pair only
 ever says "we do not have that number on file".
 
-**Production caveat.** Until an SMS or WhatsApp provider is configured, pairing is
-allowed only outside production (`REBUY_ENV=production` refuses it). The upgrade
-is a 6-digit code sent to the phone and exchanged for the token — the token
-exchange already exists, only the code step is missing. Do not ship pairing to
-real customers before that step lands, or a phone number is the only secret
-protecting a shopper's purchase history.
+**Production caveat, enforced not just documented.** When `REBUY_ENV=production`
+and no SMS provider is configured, `POST /api/native/pair` returns
+
+```
+503  { "error": "App pairing is not open yet — it needs a verification code by SMS",
+       "code": "pairing_closed" }
+```
+
+The reason is that a phone number on file is a weak secret: it is printed on
+receipts and read out to cashiers. A successful pairing would then prove only
+that someone knows a number. The upgrade is a 6-digit code sent to the phone and
+exchanged for the token — the token exchange already exists, only the code step is
+missing. Configure `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` (or
+the WhatsApp equivalents) and the gate opens by itself, because it checks whether
+the SMS channel has left its `sandbox` driver.
+
+The app should treat `pairing_closed` as "not available in this shop yet" and
+show that plainly, not as a retryable network error.
 
 Store the token in the keychain / Keystore, never in plain preferences.
 

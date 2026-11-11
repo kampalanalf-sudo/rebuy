@@ -115,6 +115,12 @@ echo "$GOOD" | grep -q '"used": true' \
   || { F=$((F+1)); printf "  \033[31mFAIL\033[0m accurate fix is used (got %s)\n" "$GOOD"; }
 
 
+# The production pairing gate needs a server booted with REBUY_ENV=production,
+# so it is documented rather than asserted here:
+#   REBUY_ENV=production REBUY_SECRET_KEY=... python3 serve.py --port 8320
+#   POST /api/native/pair  ->  503 {"code":"pairing_closed"}
+# Verify it after enabling SMS: pairing must then succeed.
+
 echo "== logout =="
 curl -s -b "$C" -X POST "$B/api/auth/logout" -o /dev/null
 t "$(code -b "$C" "$B/api/shop")" 401 "session dead after logout"
