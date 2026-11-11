@@ -31,6 +31,11 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
 
+# Google's signing keys change rarely; cache the fetch for an hour. A miss
+# triggers a forced refresh, so a rotation is handled without waiting it out.
+_JWKS_CACHE: dict = {"keys": None, "at": 0.0}
+_JWKS_TTL = 3600.0
+
 
 class AuthError(Exception):
     def __init__(self, message: str, code: str = "auth_error", status: int = 400):
@@ -185,6 +190,19 @@ def decode_id_token(id_token: str, verify_signature: bool = True) -> dict:
     return claims
 
 
+def _google_jwks(force: bool = False) -> dict:
+    """Fetch Google's signing keys, cached for an hour."""
+    if config.JWKS_CACHE_OFF:
+        return _http_json(GOOGLE_CERTS_URL)
+    now = time.time()
+    if not force and _JWKS_CACHE["keys"] and (now - _JWKS_CACHE["at"]) < _JWKS_TTL:
+        return _JWKS_CACHE["keys"]
+    keys = _http_json(GOOGLE_CERTS_URL)
+    _JWKS_CACHE["keys"] = keys
+    _JWKS_CACHE["at"] = now
+    return keys
+
+
 def _verify_google_signature(parts: list[str], claims: dict) -> None:
     """Verify the RS256 signature against Google's published JWKS.
 
@@ -193,12 +211,31 @@ def _verify_google_signature(parts: list[str], claims: dict) -> None:
     is missing" failure mode. Any network problem raises, and the caller decides
     whether an offline environment is acceptable; in production it is not.
     """
-    jwks = _http_json(GOOGLE_CERTS_URL)
+    jwks = _google_jwks()
+    # The key id lives in the JWT *header* (parts[0]), never in the claims.
+    # Reading it from the payload yields None, which made every sign-in fail
+    # with "unknown key".
+    try:
+        header = json.loads(_unb64(parts[0]))
+    except Exception as e:  # noqa: BLE001
+        raise AuthError("Malformed Google token header", "google_bad_token", 502) from e
+    kid = header.get("kid") or claims.get("kid")
+    alg = header.get("alg")
+    if alg != "RS256":
+        raise AuthError(f"Unexpected token algorithm {alg!r}", "google_bad_token", 502)
     keys = {k.get("kid"): k for k in jwks.get("keys", [])}
-    kid = claims.get("kid")
     key = keys.get(kid)
     if not key:
-        raise AuthError("Google signed the token with an unknown key", "google_bad_token", 502)
+        # Google rotates its signing keys. An unrecognised kid usually means a
+        # key published after our fetch was cached, so refresh once and retry.
+        _JWKS_CACHE["at"] = 0.0
+        jwks2 = _google_jwks(force=True)
+        keys2 = {k.get("kid"): k for k in jwks2.get("keys", [])}
+        key = keys2.get(kid)
+        if not key:
+            raise AuthError(
+                f"Google signed the token with an unknown key (kid={(kid or '')[:20]!r}, "
+                f"known={len(keys2)})", "google_bad_token", 502)
     n = _b64int(key["n"])
     e = _b64int(key["e"])
     signing_input = f"{parts[0]}.{parts[1]}".encode()

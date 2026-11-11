@@ -235,13 +235,16 @@ def _signed_token(**overrides):
     now = int(time.time())
     payload = {"iss": "https://accounts.google.com", "aud": config.GOOGLE_CLIENT_ID,
                "exp": now + 600, "email": "boss@rebuy.ug", "email_verified": True,
-               "sub": "g-1", "kid": _KID}
+               "sub": "g-1"}  # NO kid here -- Google puts it in the header only
     payload.update(overrides)
     head = _b64u(json.dumps({"alg": "RS256", "kid": _KID, "typ": "JWT"}).encode())
     body = _b64u(json.dumps(payload).encode())
     sig = _sign_rs256(f"{head}.{body}".encode())
     return f"{head}.{body}.{_b64u(sig)}"
 
+
+# the JWKS cache would mask key swaps between checks
+_authmod.config.JWKS_CACHE_OFF = True
 
 # point the JWKS fetch at our own key
 _authmod._http_json = lambda url, data=None, headers=None: {
@@ -259,12 +262,26 @@ check("corrupted signature rejected", raises(lambda: _authmod.decode_id_token(ba
 
 other_body = _b64u(json.dumps({"iss": "https://accounts.google.com", "aud": config.GOOGLE_CLIENT_ID,
                                "exp": int(time.time()) + 600, "email": "attacker@evil.ug",
-                               "email_verified": True, "sub": "g-9", "kid": _KID}).encode())
+                               "email_verified": True, "sub": "g-9"}).encode())
 swapped = f"{tampered_head}.{other_body}.{tampered_sig}"
 check("swapped payload rejected", raises(lambda: _authmod.decode_id_token(swapped), "google_bad_token"))
 
 _authmod._http_json = lambda url, data=None, headers=None: {"keys": []}
 check("unknown signing key rejected", raises(lambda: _authmod.decode_id_token(real), "google_bad_token"))
+
+# Regression: the key id must be read from the JWT HEADER. Reading it from the
+# claims yielded None and rejected every real Google sign-in.
+_authmod._http_json = lambda url, data=None, headers=None: {
+    "keys": [{"kid": _KID, "kty": "RSA", "alg": "RS256", "use": "sig",
+              "n": _b64u(_N.to_bytes((_N.bit_length() + 7) // 8, "big")), "e": _b64u(_E.to_bytes(3, "big"))}]}
+check("kid is read from the token header, not the claims",
+      _authmod.decode_id_token(_signed_token())["email"] == "boss@rebuy.ug")
+
+_no_kid_head = _b64u(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
+_b2 = _signed_token().split(".")[1]
+check("token with no kid in the header is rejected",
+      raises(lambda: _authmod.decode_id_token(f"{_no_kid_head}.{_b2}.{_signed_token().split('.')[2]}"),
+             "google_bad_token"))
 
 print("\n\033[1mproduction gates\033[0m")
 import importlib  # noqa: E402

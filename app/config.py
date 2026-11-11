@@ -101,6 +101,9 @@ GOOGLE_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 
 ALLOWED_EMAILS = _list("REBUY_ALLOWED_EMAILS")
 ADMIN_EMAILS = _list("REBUY_ADMIN_EMAILS")
+
+# Turn off the JWKS cache (tests do this so they can swap Google's keys).
+JWKS_CACHE_OFF = _bool("REBUY_JWKS_NO_CACHE", default=False)
 # Demo seeding is a development convenience, never a production mode. In
 # production it is hard-off regardless of the environment variable: a stray
 # REBUY_SEED_DEMO=1 in a committed .env file once refilled a wiped production
