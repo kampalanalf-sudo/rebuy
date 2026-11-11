@@ -24,7 +24,6 @@
       "dest": "/api/index.py?__path=$1"
     }
   ],
-  "_crons_note": "Vercel Hobby allows at most one cron run per day, so the schedule is daily. On Pro, change it to */5 * * * * (or set REBUY_TICK_SECONDS and use an external scheduler) to advance the reminder queue more often. A daily sweep still sends anything already due; it is the follow-up timing that gets coarser.",
   "crons": [
     {
       "path": "/api/cron/tick",
