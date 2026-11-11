@@ -16,7 +16,11 @@ const ROOT = path.dirname(__dirname);
 const DOCS = path.join(ROOT, "docs");
 
 const SHOP_VIEWS = ["/dashboard", "/inbox", "/reminders", "/customers", "/segments", "/loyalty",
-  "/sales", "/products", "/coupons", "/reports", "/import", "/settings", "/team", "/account"];
+  "/sales", "/products", "/coupons", "/reports", "/import", "/settings", "/team", "/account",
+  // the AI nudge pages are sub-routes: they only resolve if render() matches the
+  // whole path, so they are worth sweeping explicitly rather than trusting
+  // "/nudges" to stand in for them.
+  "/nudges", "/nudges/places", "/nudges/settings"];
 const ADMIN_VIEWS = ["/overview", "/shops", "/revenue", "/trials", "/messages", "/channels",
   "/growth", "/audit", "/settings"];
 

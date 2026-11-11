@@ -73,10 +73,26 @@ def fetch_shop(shop_id: int) -> dict:
     loyalty = db.q("SELECT * FROM loyalty_events WHERE shop_id=? ORDER BY id DESC LIMIT 200", (shop_id,))
     templates = db.q("SELECT * FROM templates WHERE shop_id IS NULL OR shop_id=? ORDER BY key", (shop_id,))
     user = db.q1("SELECT id,name,email,role,shop_id FROM users WHERE shop_id=? ORDER BY id LIMIT 1", (shop_id,))
+    # The nudge tables arrive with the location feature. A database built before
+    # that still has to publish, so a missing table becomes empty data, not a
+    # stack trace in the middle of a release.
+    def _safe(sql, params=()):
+        try:
+            return db.q(sql, params)
+        except Exception:  # noqa: BLE001
+            return []
     return {
         "shop": shop, "user": user, "customers": customers, "sales": sales, "sale_items": items,
         "products": products, "reminders": reminders, "messages": messages, "coupons": coupons,
         "campaigns": campaigns, "loyalty_events": loyalty, "templates": templates,
+        "nudge_decisions": _safe("SELECT * FROM nudge_decisions WHERE shop_id=? "
+                                 "ORDER BY created_at DESC LIMIT 60", (shop_id,)),
+        "shop_places": _safe("SELECT * FROM shop_places WHERE shop_id=? ORDER BY id", (shop_id,)),
+        "nudge_settings": (_safe("SELECT * FROM nudge_settings WHERE shop_id=?", (shop_id,)) or [None])[0],
+        "nudge_sends": _safe("SELECT * FROM nudge_sends WHERE shop_id=?", (shop_id,)),
+        "consents": _safe("SELECT * FROM consents WHERE shop_id=?", (shop_id,)),
+        "visits": _safe("SELECT * FROM visits WHERE shop_id=? ORDER BY id DESC LIMIT 100", (shop_id,)),
+        "devices": _safe("SELECT * FROM devices WHERE shop_id=?", (shop_id,)),
     }
 
 
@@ -231,6 +247,75 @@ def build_demo(data: dict, shop_id: int) -> dict:
         "loyalty_events": data["loyalty_events"],
         "templates": data["templates"],
         "meta": {"category_cycles": engine.CATEGORY_DEFAULT_CYCLES, "risk_bands": engine.RISK_BANDS},
+        "nudges": nudge_block(data),
+    }
+
+
+# ------------------------------------------------------------- nudge payload
+def nudge_block(data: dict) -> dict:
+    """Freeze what the AI nudge cockpit needs, computed by the real model code.
+
+    The lift verdict, the per-decision explanations and the best-time buckets are
+    produced by app/nudges.py here at build time. Re-implementing them in
+    JavaScript would let the published demo drift from what the server actually
+    decides, which is the one thing a demo of a decision engine must not do.
+    """
+    import json as _json
+
+    from app import nudges as _nudges
+
+    shop = data["shop"]
+    decisions = data.get("nudge_decisions") or []
+    recent = []
+    for r in decisions:
+        try:
+            feats = _json.loads(r.get("features") or "{}")
+            top = _nudges.contributions(feats)[:3]
+        except Exception:  # noqa: BLE001
+            top = []
+        row = dict(r)
+        row["top_features"] = top
+        row.pop("features", None)
+        recent.append(row)
+
+    by_trigger = {}
+    for r in decisions:
+        k = r.get("trigger_kind") or "time"
+        b = by_trigger.setdefault(k, {"trigger_kind": k, "n": 0, "sent": 0, "revenue": 0.0})
+        b["n"] += 1
+        b["sent"] += 1 if r.get("send") else 0
+        b["revenue"] += float(r.get("revenue") or 0)
+
+    sends = data.get("nudge_sends") or []
+    consents = data.get("consents") or []
+    devices = data.get("devices") or []
+    customers = data.get("customers") or []
+    loc = {c["customer_id"]: c for c in consents if (c.get("purpose") == "location" and c.get("granted"))}
+    mkt = {c["customer_id"]: c for c in consents if (c.get("purpose") == "marketing" and c.get("granted"))}
+
+    settings = data.get("nudge_settings") or _nudges.settings_for(shop["id"])
+    try:
+        lift = _nudges.lift_report(shop["id"], 30)
+    except Exception:  # noqa: BLE001
+        lift = {"verdict": "not enough history in this snapshot",
+                "sent": {"n": 0, "ci": [0, 0]}, "suppressed": {"n": 0, "ci": [0, 0]}}
+    return {
+        "lift": lift,
+        "decisions": recent,
+        "by_trigger": list(by_trigger.values()),
+        "places": data.get("shop_places") or [],
+        "settings": settings,
+        "sent_total": len(sends),
+        "opt_pct": round(100.0 * len(loc) / len(customers), 1) if customers else 0.0,
+        "consent": {
+            "customers": len(customers),
+            "location_consent": len(loc),
+            "marketing_consent": len(mkt),
+            "app_installs": len(devices),
+            "location_rate": round(100.0 * len(loc) / len(customers), 1) if customers else 0.0,
+        },
+        "best_times": _nudges.best_time_slots({"id": shop["id"], "sector": shop.get("sector", "")}),
+        "visits": data.get("visits") or [],
     }
 
 
@@ -364,6 +449,47 @@ SHIM_JS = r"""
       invites: [],
       roles: [{key: "owner", label: "Owner", blurb: "Full access, billing, team"},
               {key: "staff", label: "Staff", blurb: "Sales, customers, reminders"}]};
+
+    // ---- AI nudges (read-only snapshot) ----------------------------------
+    // The cockpit renders real decisions, real weights and a real lift verdict
+    // computed by app/nudges.py at build time. What it cannot do is change
+    // anything: there is no server behind a static page.
+    if (p === "/api/nudges/insights") {
+      const n = d.nudges || {};
+      return {shop: {id: d.shop.id, name: d.shop.name, sector: d.shop.sector},
+              lift: n.lift || {verdict: "not available in the snapshot", sent: {n: 0}, suppressed: {n: 0}},
+              recent: n.decisions || [], by_trigger: n.by_trigger || [],
+              best_times: n.best_times || {by_hour: []},
+              consent: n.consent || {customers: 0, location_consent: 0, marketing_consent: 0,
+                                     app_installs: 0, location_rate: 0},
+              places: n.places || [], sent_total: n.sent_total || 0,
+              demo: true};
+    }
+    if (p === "/api/nudges/places") return {places: (d.nudges || {}).places || [], demo: true};
+    if (p === "/api/nudges/settings") {
+      const st = (d.nudges || {}).settings || {};
+      // same envelope as the server: {settings, features, defaults}
+      return {settings: Object.assign({}, st, {demo: true}),
+        defaults: {min_score: 45, max_per_week: 2, quiet_minutes: 240},
+        features: [
+          {key: "urgency", label: "Product is at or past its predicted run-out date",
+           weight: 2.60, kind: "signal"},
+          {key: "proximity", label: "They are near the shop right now", weight: 1.45, kind: "signal"},
+          {key: "affinity", label: "They buy this often", weight: 1.10, kind: "signal"},
+          {key: "history", label: "They respond to messages", weight: 0.95, kind: "signal"},
+          {key: "timing", label: "It is inside their usual shopping hours", weight: 0.60, kind: "signal"},
+          {key: "margin_room", label: "There is room to discount", weight: 0.40, kind: "signal"},
+          {key: "basket", label: "It fits what they usually buy", weight: 0.35, kind: "signal"},
+          {key: "fatigue", label: "They were messaged recently", weight: -2.80, kind: "brake"},
+        ]};
+    }
+    if (p === "/api/nudges/proximity" || p === "/api/nudges/places/delete") {
+      // Refuse honestly instead of faking a result: a visitor clicking "Run now"
+      // should learn that a static snapshot cannot send anything.
+      const err = new Error("This is a read-only snapshot. Run the app locally to send nudges.");
+      err.status = 405; err.code = "read_only_demo";
+      throw err;
+    }
 
     if (p === "/api/shop") {
       const due = d.reminders.filter(r => r.is_due).length;

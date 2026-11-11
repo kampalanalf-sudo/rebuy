@@ -205,6 +205,47 @@ const Rebuy = (() => {
       roles: [{key: "owner", label: "Owner", blurb: "Full access, billing, team"},
               {key: "staff", label: "Staff", blurb: "Sales, customers, reminders"}]};
 
+    // ---- AI nudges (read-only snapshot) ----------------------------------
+    // The cockpit renders real decisions, real weights and a real lift verdict
+    // computed by app/nudges.py at build time. What it cannot do is change
+    // anything: there is no server behind a static page.
+    if (p === "/api/nudges/insights") {
+      const n = d.nudges || {};
+      return {shop: {id: d.shop.id, name: d.shop.name, sector: d.shop.sector},
+              lift: n.lift || {verdict: "not available in the snapshot", sent: {n: 0}, suppressed: {n: 0}},
+              recent: n.decisions || [], by_trigger: n.by_trigger || [],
+              best_times: n.best_times || {by_hour: []},
+              consent: n.consent || {customers: 0, location_consent: 0, marketing_consent: 0,
+                                     app_installs: 0, location_rate: 0},
+              places: n.places || [], sent_total: n.sent_total || 0,
+              demo: true};
+    }
+    if (p === "/api/nudges/places") return {places: (d.nudges || {}).places || [], demo: true};
+    if (p === "/api/nudges/settings") {
+      const st = (d.nudges || {}).settings || {};
+      // same envelope as the server: {settings, features, defaults}
+      return {settings: Object.assign({}, st, {demo: true}),
+        defaults: {min_score: 45, max_per_week: 2, quiet_minutes: 240},
+        features: [
+          {key: "urgency", label: "Product is at or past its predicted run-out date",
+           weight: 2.60, kind: "signal"},
+          {key: "proximity", label: "They are near the shop right now", weight: 1.45, kind: "signal"},
+          {key: "affinity", label: "They buy this often", weight: 1.10, kind: "signal"},
+          {key: "history", label: "They respond to messages", weight: 0.95, kind: "signal"},
+          {key: "timing", label: "It is inside their usual shopping hours", weight: 0.60, kind: "signal"},
+          {key: "margin_room", label: "There is room to discount", weight: 0.40, kind: "signal"},
+          {key: "basket", label: "It fits what they usually buy", weight: 0.35, kind: "signal"},
+          {key: "fatigue", label: "They were messaged recently", weight: -2.80, kind: "brake"},
+        ]};
+    }
+    if (p === "/api/nudges/proximity" || p === "/api/nudges/places/delete") {
+      // Refuse honestly instead of faking a result: a visitor clicking "Run now"
+      // should learn that a static snapshot cannot send anything.
+      const err = new Error("This is a read-only snapshot. Run the app locally to send nudges.");
+      err.status = 405; err.code = "read_only_demo";
+      throw err;
+    }
+
     if (p === "/api/shop") {
       const due = d.reminders.filter(r => r.is_due).length;
       return {shop: d.shop, counts: {
