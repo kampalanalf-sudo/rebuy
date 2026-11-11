@@ -397,6 +397,9 @@ function setPage(title, sub) {
 }
 
 /* ===================================================================== router */
+// Pages that work without a shop (everything else 403s with "shop account required").
+const NO_SHOP_PAGES = new Set(["onboarding", "account", "admin"]);
+
 const ROUTES = {};
 function page(path, opts, render) { ROUTES[path] = Object.assign({render}, opts || {}); }
 
@@ -404,6 +407,11 @@ async function boot() {
   // top-level error surface
   window.addEventListener("unhandledrejection", ev => {
     const e = ev.reason || {};
+    // An account with no shop cannot use shop-scoped endpoints; that is a
+    // normal state on the way to onboarding, not an error worth a toast.
+    if (e && e.status === 403 && /shop account required/i.test(e.message || "")) {
+      ev.preventDefault(); return;
+    }
     if (e && e.status) { toast(e.message || "Request failed", "bad"); ev.preventDefault(); }
   });
   const hash = (location.hash || "#/dashboard").slice(1) || "/dashboard";
@@ -426,14 +434,25 @@ async function boot() {
     location.hash = "#/login" + (S.query ? "?" + S.query : "");
     return;
   }
-  if (S.user && ["/login", "/signup"].includes(path.split("?")[0])) { location.hash = S.user.role === "admin" ? "#/admin" : "#/dashboard"; return; }
-  if (S.user) refreshNotice();
+  if (S.user && ["/login", "/signup"].includes(path.split("?")[0])) {
+    location.hash = S.user.role === "admin" ? "#/admin" : (S.user.shop_id ? "#/dashboard" : "#/onboarding");
+    return;
+  }
+  // An account with no shop cannot use shop-scoped pages at all: every one of
+  // them 403s. Send them to the page that explains it and offers a way forward.
+  if (S.user && !S.user.shop_id && !NO_SHOP_PAGES.has(path.split("/")[1] || "dashboard")) {
+    location.hash = "#/onboarding"; return;
+  }
+  if (S.user && S.user.shop_id) refreshNotice();
   render(path);
 }
 
 function render(path) {
   S.route = path;
-  const parts = (path.split("?")[0] || "").split("/").filter(Boolean);           // e.g. ["nudges","settings"]
+  const parts = (path.split("?")[0] || "").split("/").filter(Boolean);
+  // The platform cockpit is its own document, not an SPA route. Without this
+  // #/admin fell through to the dashboard, which 403s for a shopless admin.
+  if (parts[0] === "admin") { window.location.replace("/admin"); return; }           // e.g. ["nudges","settings"]
   // exact route first ("/nudges/settings"), then the section ("/nudges"),
   // then the fallback. Sub-pages use the exact match.
   const exact = "/" + parts.join("/");
@@ -650,6 +669,27 @@ async function doSignup(ev) {
 }
 
 page("/onboarding", {}, async () => {
+  // An account with no shop cannot call shop-scoped endpoints. This is the
+  // landing page for that case: explain it and offer a real way forward,
+  // rather than firing a request that 403s.
+  if (S.user && !S.user.shop_id) {
+    const isAdmin = S.user.role === "admin";
+    return `<div class="authwrap"><div class="authmain"><div class="authcard" style="max-width:560px">
+      <h2>${isAdmin ? "You're signed in as a platform admin" : "Your account isn't linked to a shop yet"}</h2>
+      <div class="muted mt8" style="margin-bottom:18px">
+        Signed in as <b>${esc(S.user.email)}</b>. ${
+          isAdmin
+            ? "Admin accounts operate the platform cockpit rather than a single shop, so the shop dashboard isn't available here."
+            : "You can sign in, but no shop has been created for this account, so customer, sales and reminder pages are unavailable."}
+      </div>
+      ${isAdmin ? `<a class="btn primary" style="width:100%;justify-content:center;padding:11px" href="/admin">Open the admin cockpit →</a>
+      <div class="tiny muted mt12" style="text-align:center">Shops, messaging, revenue and the audit trail all live there.</div>` : ""}
+      <div class="hr"></div>
+      <div style="font-weight:600;margin-bottom:8px">Need a shop of your own?</div>
+      <div class="tiny muted">Ask your Rebuy contact to create one for this email, then sign in again — you'll land straight in the dashboard.</div>
+      <a class="btn mt12" style="width:100%;justify-content:center" href="#" onclick="logout();return false">Sign out</a>
+    </div></div></div>`;
+  }
   const d = await api("/api/dashboard");
   const steps = d.onboarding || [];
   const done = steps.filter(s => s.done).length;
