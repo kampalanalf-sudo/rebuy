@@ -6,6 +6,10 @@
 -- record of the change for an existing database, where CREATE TABLE IF NOT
 -- EXISTS would otherwise be the only path. Safe to re-run.
 --
+-- weather_aware was specified here and then removed: it was stored and
+-- validated but no code ever read it, so offering the switch would have
+-- promised a behaviour that did not exist.
+--
 -- Reuses existing tables where it can: devices (app installs), consents
 -- (per-purpose permissions), push_tokens (push delivery), visits (footfall),
 -- messages (the queued nudge itself). Only the following are new.
@@ -106,7 +110,6 @@ CREATE TABLE IF NOT EXISTS nudge_settings (
   max_discount_pct    REAL DEFAULT 15,
   discount_aggressiveness REAL DEFAULT 0.5,
   best_time_enabled   SMALLINT DEFAULT 1 CHECK (best_time_enabled IN (0,1)),
-  weather_aware       SMALLINT DEFAULT 0 CHECK (weather_aware IN (0,1)),
   updated_at          TEXT NOT NULL
 )
 

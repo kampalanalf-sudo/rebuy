@@ -94,7 +94,7 @@ def contributions(features: dict) -> list[dict]:
 DEFAULTS = {
     "enabled": 1, "proximity_enabled": 1, "ai_scoring": 1, "min_score": 45.0,
     "max_per_week": 2, "quiet_minutes": 240, "max_discount_pct": 15.0,
-    "discount_aggressiveness": 0.5, "best_time_enabled": 1, "weather_aware": 0,
+    "discount_aggressiveness": 0.5, "best_time_enabled": 1,
 }
 
 
@@ -119,7 +119,7 @@ def save_settings(shop_id: int, values: dict) -> dict:
                 merged[k] = max(0.0, min(100.0 if k == "min_score" else 1.0, float(v)))
             except (TypeError, ValueError):
                 continue
-        elif k in ("enabled", "proximity_enabled", "ai_scoring", "best_time_enabled", "weather_aware"):
+        elif k in ("enabled", "proximity_enabled", "ai_scoring", "best_time_enabled"):
             merged[k] = 1 if str(v) in ("1", "true", "True", "on") else 0
         else:
             try:

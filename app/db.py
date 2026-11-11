@@ -282,7 +282,7 @@ CREATE TABLE IF NOT EXISTS nudge_decisions (      -- every AI decision, and why
   shop_id       INTEGER NOT NULL,
   customer_id   INTEGER,
   reminder_id   INTEGER,
-  trigger_kind  TEXT DEFAULT 'time',              -- time | proximity | visit | intent | weather
+  trigger_kind  TEXT DEFAULT 'time',              -- time | proximity
   product_name  TEXT DEFAULT '',
   score         REAL DEFAULT 0,
   expected_value REAL DEFAULT 0,
@@ -321,7 +321,6 @@ CREATE TABLE IF NOT EXISTS nudge_settings (       -- per-shop knobs, one row
   max_discount_pct    REAL DEFAULT 15,
   discount_aggressiveness REAL DEFAULT 0.5,       -- 0 = never discount, 1 = discount early
   best_time_enabled   INTEGER DEFAULT 1,
-  weather_aware       INTEGER DEFAULT 0,
   updated_at          TEXT NOT NULL,
   FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
 );

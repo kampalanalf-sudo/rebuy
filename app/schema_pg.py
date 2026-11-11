@@ -266,7 +266,6 @@ STATEMENTS = [
   max_discount_pct    REAL DEFAULT 15,
   discount_aggressiveness REAL DEFAULT 0.5,
   best_time_enabled   SMALLINT DEFAULT 1 CHECK (best_time_enabled IN (0,1)),
-  weather_aware       SMALLINT DEFAULT 0 CHECK (weather_aware IN (0,1)),
   updated_at          TEXT NOT NULL
 )""",
 
