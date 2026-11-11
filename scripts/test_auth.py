@@ -318,6 +318,51 @@ def test_static_gzip_twins():
 
 test_static_gzip_twins()
 
+# ------------------------------------------------------- route registration
+def test_every_route_module_is_imported_by_every_entry_point():
+    """A module registering @route but never imported 404s in production only.
+
+    This happened twice: api_native was missing from api/index.py, so every
+    nudge endpoint 404'd on Vercel while working perfectly locally. The entry
+    points are the local server (app/httpd.py) and the serverless adapter
+    (api/index.py); both must import every module that declares routes.
+    """
+    import re
+    import glob
+
+    app_dir = os.path.join(ROOT, "app", "..", "app")
+    app_dir = os.path.normpath(app_dir)
+    route_mods = set()
+    for path in glob.glob(os.path.join(app_dir, "*.py")):
+        text = open(path, encoding="utf-8").read()
+        if "@route(" in text:
+            route_mods.add(os.path.basename(path)[:-3])
+    check("route modules were discovered at all", len(route_mods) >= 3,
+          f"found {sorted(route_mods)}")
+
+    repo = os.path.dirname(app_dir)
+    for entry in (os.path.join(app_dir, "httpd.py"), os.path.join(repo, "api", "index.py")):
+        if not os.path.exists(entry):
+            continue
+        src = open(entry, encoding="utf-8").read()
+        # Collect module names from real import statements, ignoring comments:
+        # a module named in prose is not a registration.
+        imported = set()
+        for line in src.splitlines():
+            code = line.split("#", 1)[0]
+            found = re.match(r"\s*(?:from\s+[\w.]+\s+)?import\s+(.+)", code)
+            if found:
+                for part in found.group(1).split(","):
+                    name = part.strip().split(" as ")[0].strip()
+                    if name:
+                        imported.add(name.replace("(", "").replace(")", "").strip())
+        missing = sorted(m for m in route_mods if m not in imported)
+        check(f"{os.path.basename(entry)} imports every route module", not missing,
+              "missing: " + ", ".join(missing))
+
+
+test_every_route_module_is_imported_by_every_entry_point()
+
 print(f"\n\033[1m{len(PASSED)} passed, {len(FAILED)} failed\033[0m")
 if FAILED:
     print("failed:", ", ".join(FAILED))
