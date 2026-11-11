@@ -1,6 +1,894 @@
-<!doctype html><meta charset="utf-8"><title>Rebuy admin — demo</title>
-<style>body{font:16px/1.6 system-ui,sans-serif;margin:0;background:#0f172a;color:#e2e8f0;display:grid;
-place-items:center;height:100vh;text-align:center;padding:24px}a{color:#93c5fd}</style>
-<div><h1>Platform admin</h1><p>The admin cockpit talks to the live API, so it is not part of this
-static demo.<br>Run the app locally and open <code>/admin</code>, or use the Supabase deployment.</p>
-<p><a href="./">&larr; back to the shop demo</a></p></div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rebuy — platform admin</title>
+<style>
+  :root{
+    --ink:#111018; --muted:#6a6879; --line:#e5e3ee; --bg:#f6f6fa; --card:#fff;
+    --brand:#5b3df5; --brand-dark:#3f28c4; --brand-50:#f2efff;
+    --ok:#0d9f6e; --ok-bg:#e6f7f0; --warn:#b7791f; --warn-bg:#fdf6e3; --bad:#d64545; --bad-bg:#fdecec;
+    --info:#2563eb; --info-bg:#e8efff; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;background:var(--bg);
+       color:var(--ink);font-size:13.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  a{color:var(--brand);text-decoration:none}
+  button,input,select,textarea{font:inherit;color:inherit}
+  #shell{display:flex;min-height:100vh}
+  aside{width:214px;flex:0 0 214px;background:#0f0e1a;color:#c9c6dd;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+  .logo{display:flex;align-items:center;gap:9px;padding:16px 16px 12px;color:#fff;font-weight:800;font-size:16px;letter-spacing:-.2px}
+  .logo .mark{width:27px;height:27px;border-radius:8px;background:linear-gradient(135deg,#7c5cff,#4c2ee0);display:grid;place-items:center;font-size:14px}
+  .logo .tag{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8b86b0;padding:2px 6px;border:1px solid #322c56;border-radius:5px;margin-left:2px}
+  nav{padding:6px;flex:1;overflow:auto}
+  .navitem{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:8px;color:#c9c6dd;font-size:13px;cursor:pointer;margin-bottom:2px}
+  .navitem:hover{background:#1c1a30;color:#fff}
+  .navitem.on{background:#292347;color:#fff;font-weight:600}
+  .navitem .ic{width:16px;text-align:center;font-size:12px;opacity:.9}
+  .navitem .pill{margin-left:auto;background:var(--brand);color:#fff;font-size:10px;padding:1px 6px;border-radius:20px;font-weight:700}
+  .sidefoot{padding:11px;border-top:1px solid #221e39;font-size:11.5px;color:#8b86b0}
+  .sidefoot a{color:#a9a5c9;display:block;padding:4px 2px}
+  .sidefoot a:hover{color:#fff}
+  main{flex:1;min-width:0;display:flex;flex-direction:column}
+  header.top{display:flex;align-items:center;gap:12px;padding:12px 22px;background:rgba(255,255,255,.9);backdrop-filter:blur(6px);
+              border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  header.top h1{margin:0;font-size:16.5px;font-weight:700;letter-spacing:-.2px}
+  header.top .sub{font-size:12px;color:var(--muted)}
+  header.top .grow{flex:1}
+  .content{padding:18px 22px 50px;max-width:1560px;width:100%}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(17,16,24,.05)}
+  .card .hd{padding:12px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px}
+  .card .hd h3{margin:0;font-size:13.5px;font-weight:700}
+  .card .hd .grow{flex:1}
+  .card .bd{padding:14px}
+  .grid{display:grid;gap:12px}
+  .g6{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g21{grid-template-columns:2fr 1fr}
+  @media (max-width:1350px){.g6{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media (max-width:1050px){.g4,.g3,.g2,.g21{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:700px){.g6,.g4,.g3,.g2,.g21{grid-template-columns:1fr}aside{display:none}.content{padding:12px}header.top{padding:10px 12px}}
+  .kpi{padding:12px 13px}
+  .kpi .l{font-size:11px;color:var(--muted);display:flex;gap:5px;align-items:center}
+  .kpi .v{font-size:21px;font-weight:750;letter-spacing:-.5px;margin-top:5px;line-height:1.15}
+  .kpi .f{font-size:10.5px;color:var(--muted);margin-top:3px}
+  .kpi.brand{background:linear-gradient(135deg,#5b3df5,#7c5cff);border:0;color:#fff}
+  .kpi.brand .l,.kpi.brand .f{color:#ded7ff}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:8px;border:1px solid var(--line);background:#fff;
+       font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:#c8c3df;background:#fbfaff}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.primary:hover{background:var(--brand-dark)}
+  .btn.sm{padding:4px 8px;font-size:11.5px;border-radius:6px}
+  .btn.danger{color:var(--bad);border-color:#f3cccc}
+  .btn.dark{background:#15132a;border-color:#15132a;color:#fff}
+  .row{display:flex;align-items:center;gap:8px}
+  .row.wrap{flex-wrap:wrap}
+  .grow{flex:1}
+  .input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;outline:0}
+  .input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(91,61,245,.12)}
+  label.f{display:block;font-size:11.5px;font-weight:650;color:#3d3b4d;margin-bottom:4px}
+  .field{margin-bottom:11px}
+  .hint{font-size:11px;color:var(--muted);margin-top:3px}
+  table.t{width:100%;border-collapse:collapse}
+  table.t th{text-align:left;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:650;
+             padding:8px 10px;border-bottom:1px solid var(--line);background:#fbfaff;white-space:nowrap}
+  table.t td{padding:9px 10px;border-bottom:1px solid #f1eff8;vertical-align:middle}
+  table.t tr:last-child td{border-bottom:0}
+  table.t tbody tr.click{cursor:pointer}
+  table.t tbody tr.click:hover td{background:#faf9ff}
+  .scrollx{overflow-x:auto}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:20px;font-size:10.5px;font-weight:650;background:#f0eff7;color:#4b4960;white-space:nowrap}
+  .badge.ok{background:var(--ok-bg);color:var(--ok)}
+  .badge.warn{background:var(--warn-bg);color:var(--warn)}
+  .badge.bad{background:var(--bad-bg);color:var(--bad)}
+  .badge.info{background:var(--info-bg);color:var(--info)}
+  .badge.brand{background:var(--brand-50);color:var(--brand-dark)}
+  .dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
+  .mono{font-family:var(--mono);font-size:11.5px}
+  .muted{color:var(--muted)}
+  .tiny{font-size:11px}
+  .right{text-align:right}
+  .nowrap{white-space:nowrap}
+  .mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}
+  .empty{padding:26px 12px;text-align:center;color:var(--muted)}
+  .empty .big{font-size:22px;margin-bottom:4px}
+  .bar{height:6px;border-radius:5px;background:#eeecf7;overflow:hidden}
+  .bar > i{display:block;height:100%;border-radius:5px;background:var(--brand)}
+  .tabs{display:flex;gap:3px;border-bottom:1px solid var(--line);padding:0 14px;overflow:auto}
+  .tab{padding:9px 11px;font-weight:600;font-size:12.5px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+  .tab.on{color:var(--brand);border-bottom-color:var(--brand)}
+  .chips{display:flex;gap:5px;flex-wrap:wrap}
+  .chip{padding:4px 9px;border-radius:20px;border:1px solid var(--line);background:#fff;font-size:11.5px;font-weight:600;cursor:pointer;color:#4b4960}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .pager{display:flex;align-items:center;justify-content:flex-end;gap:7px;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .statline{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed #eeecf7;font-size:12.5px}
+  .statline:last-child{border-bottom:0}
+  .statline b{font-weight:650}
+  .hr{height:1px;background:var(--line);margin:12px 0}
+  .tile{border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .tile .v{font-size:17px;font-weight:700;letter-spacing:-.3px}
+  .tile .l{font-size:10.5px;color:var(--muted)}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px}
+  #modals{position:fixed;inset:0;z-index:80;display:none}
+  #modals.open{display:block}
+  .scrim{position:absolute;inset:0;background:rgba(17,16,24,.45)}
+  .modal{position:relative;margin:5vh auto;background:#fff;border-radius:14px;max-width:760px;width:calc(100% - 28px);max-height:88vh;
+         display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.25)}
+  .modal.wide{max-width:1080px}
+  .modal header{padding:13px 17px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px}
+  .modal header h3{margin:0;font-size:14.5px}
+  .modal .body{padding:16px;overflow:auto}
+  .modal footer{padding:11px 16px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;background:#fbfaff;border-radius:0 0 14px 14px}
+  .x{margin-left:auto;border:0;background:#f2f0fa;width:26px;height:26px;border-radius:7px;font-size:14px;cursor:pointer}
+  #toasts{position:fixed;right:14px;bottom:14px;z-index:99;display:flex;flex-direction:column;gap:6px;max-width:360px}
+  .toast{background:#1d1b2e;color:#fff;padding:9px 12px;border-radius:8px;font-size:12.5px;box-shadow:0 8px 24px rgba(0,0,0,.22);animation:sl .16s ease-out}
+  .toast.ok{background:#0d7a56}.toast.bad{background:#b23b3b}
+  @keyframes sl{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
+  .login{min-height:100vh;display:grid;place-items:center;background:radial-gradient(900px 500px at 20% 0%,#241d54,#0b0a14 70%)}
+  .logincard{width:100%;max-width:380px;background:#fff;border-radius:16px;padding:26px;box-shadow:0 30px 90px rgba(0,0,0,.35)}
+  .copybox{background:#0f1020;color:#cfd3ff;padding:9px 11px;border-radius:8px;font-family:var(--mono);font-size:11px;word-break:break-all}
+  .timeline{position:relative;padding-left:15px}
+  .timeline:before{content:"";position:absolute;left:4px;top:3px;bottom:3px;width:2px;background:#eceaf6}
+  .tl{position:relative;padding-bottom:11px}
+  .tl:before{content:"";position:absolute;left:-14px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--brand);border:2px solid #fff;box-shadow:0 0 0 2px #e6e1ff}
+  .tl .tt{font-weight:600;font-size:12px}
+  .tl .ss{font-size:11px;color:var(--muted)}
+  details.adv{border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+  details.adv summary{padding:10px 12px;cursor:pointer;font-weight:650;font-size:12.5px}
+  details.adv[open] summary{border-bottom:1px solid var(--line)}
+  details.adv .inner{padding:12px}
+  .mini-chip{font-size:10px;padding:2px 6px;border-radius:5px;background:#f0eff7;color:#4b4960;font-weight:600}
+</style>
+<script src="admin-api.js"></script></head>
+<body><div style="background:#ecfdf5;border-bottom:1px solid #a7f3d0;color:#065f46;font:500 13px/1.5 system-ui,sans-serif;padding:10px 16px;text-align:center">Platform admin &mdash; <b>read-only demo</b>. Figures are a real snapshot of 120 shops. <a href="./" style="color:#047857">Back to the shop app &rarr;</a></div>
+<div id="app"></div>
+<div id="modals"><div class="scrim" onclick="closeModal()"></div><div id="modalslot"></div></div>
+<div id="toasts"></div>
+<script>
+"use strict";
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const num = n => Number(n || 0).toLocaleString("en-US");
+const money = (n, cur) => {
+  const c = cur || "UGX", v = Number(n || 0);
+  return c + " " + (Math.abs(v) >= 1000 ? v.toLocaleString("en-US", {maximumFractionDigits: 0}) : v.toLocaleString("en-US", {maximumFractionDigits: 2}));
+};
+const pct = n => (n == null ? "—" : Number(n).toFixed(1) + "%");
+const dt = s => {
+  if (!s) return "—";
+  const d = new Date(String(s).replace(" ", "T"));
+  if (isNaN(d)) return String(s).slice(0, 16);
+  const days = Math.floor((new Date() - d) / 86400000);
+  if (days === 0 && String(s).length > 10) return d.toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days > 0 && days < 7) return days + "d ago";
+  return d.toLocaleDateString("en-GB", {day: "2-digit", month: "short", year: "numeric"});
+};
+const initials = n => (n || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase();
+const AV = ["#5b3df5","#0d9f6e","#e0782f","#2563eb","#c2418b","#b7791f","#0e7490","#7c3aed"];
+const av = s => AV[Math.abs(String(s || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % AV.length];
+const avatar = (n, size) => `<span style="display:inline-grid;place-items:center;border-radius:50%;background:${av(n)};color:#fff;font-weight:700;width:${size||26}px;height:${size||26}px;font-size:${((size||26)*.4).toFixed(0)}px;flex:0 0 ${size||26}px">${esc(initials(n))}</span>`;
+const STATUS = {active: "ok", trial: "info", paused: "warn", churned: "bad", cancelled: "bad"};
+const RISK = {new: "", healthy: "ok", due: "info", overdue: "warn", at_risk: "bad", lost: "bad"};
+
+function toast(msg, kind) {
+  const el = document.createElement("div");
+  el.className = "toast " + (kind || "");
+  el.textContent = msg;
+  $("#toasts").appendChild(el);
+  setTimeout(() => el.remove(), kind === "bad" ? 5200 : 3000);
+}
+async function api(path, opts) {
+  opts = opts || {};
+  const init = {method: opts.method || "GET", headers: {"accept": "application/json"}, credentials: "same-origin"};
+  if (opts.body !== undefined) { init.headers["content-type"] = "application/json"; init.body = JSON.stringify(opts.body); }
+  const r = await fetch(path, init);
+  const text = await r.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch (e) { data = {error: text.slice(0, 300)}; }
+  if (!r.ok) { const e = new Error(data.message || data.error || ("HTTP " + r.status)); e.status = r.status; throw e; }
+  return data;
+}
+function openModal(title, body, footer, wide) {
+  $("#modalslot").innerHTML = `<div class="modal ${wide ? "wide" : ""}"><header><h3>${esc(title)}</h3><button class="x" onclick="closeModal()">✕</button></header>
+    <div class="body">${body}</div>${footer ? `<footer>${footer}</footer>` : ""}</div>`;
+  $("#modals").classList.add("open");
+}
+function closeModal() { $("#modals").classList.remove("open"); $("#modalslot").innerHTML = ""; }
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+const S = {user: null, route: "", days: 30, tab: "overview", shops: {page: 1, search: "", status: "", plan: "", sort: "gmv"}};
+
+const NAV = [
+  {r: "/overview", label: "Overview", ic: "◎"},
+  {r: "/shops", label: "Shops", ic: "▦"},
+  {r: "/messaging", label: "Messaging", ic: "✉"},
+  {r: "/retention", label: "Retention", ic: "◔"},
+  {r: "/revenue", label: "Revenue", ic: "₵"},
+  {r: "/queue", label: "Queue & worker", ic: "⏱"},
+  {r: "/credentials", label: "Providers", ic: "⚡"},
+  {r: "/capacity", label: "Capacity", ic: "▤"},
+  {r: "/audit", label: "Audit log", ic: "≡"},
+];
+
+function shell(inner) {
+  const which = "/" + (S.route.split("/")[1] || "overview");
+  return `<div id="shell">
+    <aside>
+      <div class="logo"><span class="mark">↻</span> Rebuy <span class="tag">admin</span></div>
+      <nav>${NAV.map(n => `<a class="navitem ${n.r === which ? "on" : ""}" href="#${n.r}"><span class="ic">${n.ic}</span>${esc(n.label)}</a>`).join("")}</nav>
+      <div class="sidefoot">
+        <div style="margin-bottom:6px">${esc(S.user ? S.user.email : "")}</div>
+        <a href="/">↗ Open shop app</a>
+        <a href="javascript:void 0" onclick="logout()">⏻ Sign out</a>
+      </div>
+    </aside>
+    <main>
+      <header class="top">
+        <div><h1 id="pt"></h1><div class="sub" id="ps"></div></div>
+        <div class="grow"></div>
+        <div class="row" style="gap:6px">
+          <button class="btn sm" onclick="tickNow(this)">⚡ Run worker now</button>
+          <button class="btn sm" onclick="reseed(this)">↻ Reseed demo data</button>
+        </div>
+      </header>
+      <div class="content" id="view">${inner}</div>
+    </main>
+  </div>`;
+}
+const PAGES = {
+  "/overview": ["Platform overview", "Every shop, every message, every shilling recovered."],
+  "/shops": ["Shops", "The full tenant list — filter, inspect and support."],
+  "/messaging": ["Messaging", "Volume, delivery, failures and cost by provider."],
+  "/retention": ["Retention engine", "Do reminders actually bring customers back?"],
+  "/revenue": ["Revenue", "MRR, plan mix and trial conversion."],
+  "/queue": ["Queue & worker", "What is due, what is stuck, and when the worker last ran."],
+  "/credentials": ["Provider credentials", "Platform-wide WhatsApp, SMS and SMTP settings."],
+  "/capacity": ["Capacity", "Evidence this platform carries 100+ shops."],
+  "/audit": ["Audit log", "Every action, by whom, on which shop."],
+};
+const ROUTES = {};
+const page = (p, fn) => { ROUTES[p] = fn; };
+const sortBtns = (cur, opts, fn) => `<div class="chips">${opts.map(([v, l]) => `<span class="chip ${cur === v ? "on" : ""}" onclick="${fn}('${v}')">${esc(l)}</span>`).join("")}</div>`;
+
+async function boot() {
+  window.addEventListener("unhandledrejection", ev => {
+    const e = ev.reason || {};
+    if (e && e.status) { toast(e.message, "bad"); ev.preventDefault(); }
+  });
+  let me = null;
+  try { me = await api("/api/auth/me"); } catch (e) {}
+  const path = (location.hash || "#/overview").slice(1) || "/overview";
+  if (!me || !me.authenticated || me.user.role !== "admin") {
+    if (me && me.authenticated && me.user.role !== "admin") {
+      $("#app").innerHTML = `<div class="login"><div class="logincard"><h2 style="margin:0 0 6px">Shop account</h2>
+        <div class="muted tiny">You are signed in as a shop owner, not a platform admin.</div>
+        <a class="btn primary mt12" style="width:100%;justify-content:center" href="/">Go to your shop dashboard</a>
+        <button class="btn mt8" style="width:100%;justify-content:center" onclick="logout()">Sign out and use an admin account</button></div></div>`;
+      return;
+    }
+    loginView();
+    return;
+  }
+  S.user = me.user;
+  render(path);
+}
+function loginView() {
+  $("#app").innerHTML = `<div class="login"><div class="logincard">
+    <div class="logo" style="padding:0 0 14px;color:#111018"><span class="mark">↻</span> Rebuy <span class="tag" style="color:#6a6879;border-color:#ddd">admin</span></div>
+    <h2 style="margin:0 0 4px;font-size:19px;letter-spacing:-.3px">Platform sign in</h2>
+    <div class="muted tiny mb12">For the Rebuy team only.</div>
+    <form onsubmit="doLogin(event)">
+      <div class="field"><label class="f">Email</label><input class="input" name="email" type="email" required value="admin@rebuy.app"></div>
+      <div class="field"><label class="f">Password</label><input class="input" name="password" type="password" required placeholder="Admin1234!"></div>
+      <button class="btn primary" style="width:100%;justify-content:center;padding:10px" type="submit">Sign in</button>
+    </form>
+    <div class="tiny muted mt12">Demo account: <span class="mono">admin@rebuy.app</span> / <span class="mono">Admin1234!</span></div>
+    <div class="tiny mt8"><a href="/">← Back to the shop app</a></div>
+  </div></div>`;
+}
+async function doLogin(ev) {
+  ev.preventDefault();
+  const f = ev.target;
+  try {
+    await api("/api/auth/login", {method: "POST", body: {email: f.email.value.trim(), password: f.password.value}});
+    location.reload();
+  } catch (e) { toast(e.message, "bad"); }
+}
+async function logout() {
+  try { await api("/api/auth/logout", {method: "POST"}); } catch (e) {}
+  location.hash = ""; location.reload();
+}
+async function tickNow(btn) {
+  btn.disabled = true;
+  try {
+    const r = await api("/api/admin/tick", {method: "POST", body: {}});
+    const s = r.stats || {};
+    toast(`Worker ran — ${s.dispatched || 0} sent, ${s.followups || 0} follow-ups, ${s.winbacks || 0} win-backs`, "ok");
+    render(S.route);
+  } catch (e) { toast(e.message, "bad"); }
+  btn.disabled = false;
+}
+async function reseed(btn) {
+  if (!confirm("Generate a fresh demo fleet? This REPLACES all shops, customers and sales in this database.")) return;
+  btn.disabled = true; btn.textContent = "Generating…";
+  try {
+    const r = await api("/api/admin/seed", {method: "POST", body: {shops: 120, reset: true}});
+    toast(`Fleet rebuilt: ${num(r.shops)} shops, ${num(r.customers)} customers, ${num(r.reminders)} reminders`, "ok");
+    render(S.route);
+  } catch (e) { toast(e.message, "bad"); }
+  btn.disabled = false; btn.textContent = "↻ Reseed demo data";
+}
+
+async function render(path) {
+  S.route = path;
+  const key = "/" + (path.split("/")[1] || "overview");
+  const fn = ROUTES[key] || ROUTES["/overview"];
+  const meta = PAGES[key] || PAGES["/overview"];
+  const app = $("#app");
+  try {
+    const html = await fn(path.split("/").slice(2));
+    app.innerHTML = html;
+    const t = $("#pt"), s = $("#ps");
+    if (t) t.textContent = meta[0];
+    if (s) s.textContent = meta[1];
+    window.scrollTo(0, 0);
+  } catch (e) {
+    app.innerHTML = `<div class="card"><div class="bd"><b>Could not load.</b><div class="muted tiny mt8">${esc(e.message)}</div>
+      <button class="btn mt12" onclick="location.reload()">Reload</button></div></div>`;
+  }
+}
+window.addEventListener("hashchange", () => render((location.hash || "#/overview").slice(1) || "/overview"));
+
+/* ------------------------------------------------------------------ overview */
+page("/overview", async () => {
+  const d = await api("/api/admin/overview?days=" + S.days);
+  const k = d.kpis;
+  const w = d.worker || {};
+  const mix = (arr, key) => arr || [];
+  const wSeries = d.gmv_series || [];
+  return shell(`
+  <div class="row wrap mb12" style="gap:8px">
+    <div class="chips">${[7, 30, 90].map(x => `<span class="chip ${S.days === x ? "on" : ""}" onclick="S.days=${x};render('/overview')">last ${x} days</span>`).join("")}</div>
+    <div class="grow"></div>
+    <span class="badge ${w.last_tick && w.last_tick !== "never" ? "ok" : "warn"}"><span class="dot"></span> worker ${w.last_tick && w.last_tick !== "never" ? "last ran " + dt(w.last_tick) : "not started"}</span>
+    <span class="badge">${num(w.ticks)} ticks</span>
+    <span class="badge brand">${num(k.queued_now)} messages queued</span>
+  </div>
+
+  <div class="grid g6">
+    <div class="card kpi brand"><div class="l">MRR</div><div class="v">${money(k.mrr)}</div><div class="f">${num(k.shops_active)} paying · ARR ${money(k.arr_projected)}</div></div>
+    <div class="card kpi"><div class="l">Shops</div><div class="v">${num(k.shops_total)}</div><div class="f">${num(k.shops_trial)} trial · ${num(k.shops_paused)} paused · +${num(k.shops_new_30d)} new</div></div>
+    <div class="card kpi"><div class="l">Customers</div><div class="v">${num(k.customers)}</div><div class="f">${num(k.sales)} sales · ${money(k.gmv)} GMV ${S.days}d</div></div>
+    <div class="card kpi"><div class="l">Revenue recovered</div><div class="v">${money(k.revenue_recovered)}</div><div class="f">${num(k.reminders_converted)} reminders converted</div></div>
+    <div class="card kpi"><div class="l">Reply rate</div><div class="v">${pct(k.reply_rate)}</div><div class="f">${num(k.messages_in)} in / ${num(k.messages_out)} out</div></div>
+    <div class="card kpi"><div class="l">Delivery rate</div><div class="v">${pct(k.delivery_rate)}</div><div class="f">${num(k.messages_failed)} failed · ${num(k.live_channels)} live channel(s)</div></div>
+  </div>
+
+  <div class="grid g21 mt16">
+    <div class="card"><div class="hd"><h3>GMV flowing through Rebuy shops</h3><div class="grow"></div><span class="tiny muted">bars = daily GMV · line = messages</span></div>
+      <div class="bd">${chart(wSeries, d.messages_series || [])}</div></div>
+    <div class="card"><div class="hd"><h3>Customer health (fleet)</h3></div><div class="bd">
+      ${(d.status_mix || []).map(s => `<div class="statline"><span class="badge ${STATUS[s.status] || ""}">${esc(s.status)}</span><b>${num(s.n)} shops</b></div>`).join("")}
+      <div class="hr"></div>
+      <div class="tiles">
+        <div class="tile"><div class="v">${pct(k.retention_score_avg)}</div><div class="l">avg retention score</div></div>
+        <div class="tile"><div class="v">${pct(k.conversion_rate)}</div><div class="l">reminder → sale</div></div>
+        <div class="tile"><div class="v">${pct(k.activation_rate)}</div><div class="l">paid shops</div></div>
+        <div class="tile"><div class="v">${money(k.arpu)}</div><div class="l">ARPU / month</div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="grid g3 mt16">
+    <div class="card"><div class="hd"><h3>Plan mix</h3></div><div class="bd">
+      ${mix(d.plan_mix).map(p => `<div class="statline"><span style="text-transform:capitalize">${esc(p.plan)}</span><b>${num(p.n)} shops · ${money(p.mrr)}</b></div>`).join("")}
+      <div class="hr"></div>
+      ${mix(d.sector_mix).slice(0, 6).map(s => `<div class="statline"><span class="muted">${esc(s.sector)}</span><b>${num(s.n)}</b></div>`).join("")}
+    </div></div>
+    <div class="card"><div class="hd"><h3>Channel mix (${S.days}d)</h3></div><div class="bd">
+      ${mix(d.channel_mix).map(c => `<div style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><b style="text-transform:capitalize">${esc(c.channel)}</b><span class="tiny muted">${num(c.n)} · ${num(c.failed)} failed</span></div>
+        <div class="bar mt8"><i style="width:${Math.min(100, 100 * c.n / Math.max(1, ...mix(d.channel_mix).map(x => x.n)))}%;background:${c.channel === "whatsapp" ? "#0d9f6e" : c.channel === "sms" ? "#2563eb" : "#b7791f"}"></i></div></div>`).join("") || `<div class="empty">No messages yet</div>`}
+      <div class="hr"></div>
+      <div class="tiny muted">Providers: ${(d.provider_health || []).map(p => `<span class="badge ${p.configured ? "ok" : "warn"}">${esc(p.channel)} · ${esc(p.driver)}</span>`).join(" ") || "sandbox"}</div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Needs attention</h3></div><div class="bd" style="padding:6px 12px">
+      ${mix(d.needs_attention).slice(0, 6).map(s => `<div class="row" style="padding:7px 0;border-bottom:1px solid #f3f1fa">
+        ${avatar(s.name, 24)}<div class="grow" style="min-width:0"><div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.name)}</div>
+        <div class="tiny muted">${num(s.customers)} customers · last sale ${dt(s.last_sale)}</div></div>
+        ${s.failures ? `<span class="badge bad">${num(s.failures)} failed</span>` : `<span class="badge ok">ok</span>`}</div>`).join("") || `<div class="empty tiny">All good</div>`}
+    </div></div>
+  </div>
+
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>Top shops by GMV</h3><div class="grow"></div><a class="btn sm" href="#/shops">All shops</a></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Shop</th><th class="right">Customers</th><th class="right">GMV</th><th class="right">Recovered</th><th class="right">Conv.</th></tr></thead><tbody>
+      ${mix(d.top_shops).map(s => `<tr class="click" onclick="shopDetail(${s.id})"><td><div class="row" style="gap:8px">${avatar(s.name, 24)}<div><b>${esc(s.name)}</b><div class="tiny muted">${esc(s.sector)} · ${esc(s.plan)}</div></div></div></td>
+        <td class="right">${num(s.customers)}</td><td class="right">${money(s.gmv)}</td><td class="right">${money(s.recovered)}</td><td class="right">${num(s.conversions)}</td></tr>`).join("")}
+      </tbody></table></div></div>
+    <div class="card"><div class="hd"><h3>Newest shops</h3><div class="grow"></div><button class="btn sm primary" onclick="createShop()">＋ Onboard a shop</button></div>
+      <div class="bd" style="padding:6px 12px">
+        ${mix(d.recent_signups).map(s => `<div class="row" style="padding:7px 0;border-bottom:1px solid #f3f1fa">
+          ${avatar(s.name, 24)}<div class="grow" style="min-width:0"><div style="font-weight:600;font-size:12px">${esc(s.name)}</div>
+          <div class="tiny muted">${esc(s.sector)} · ${esc(s.city)} · ${dt(s.created_at)}</div></div>
+          <span class="badge ${STATUS[s.status] || ""}">${esc(s.status)}</span></div>`).join("")}
+      </div></div>
+  </div>`);
+});
+
+function chart(series, msgSeries) {
+  const w = 700, h = 170, pad = 24;
+  if (!series.length) return `<div class="empty">No data</div>`;
+  const max = Math.max(1, ...series.map(p => p.value));
+  const mmax = Math.max(1, ...msgSeries.map(p => p.value));
+  const n = series.length;
+  const bw = Math.max(2, (w - pad * 2) / n - 2);
+  const x = i => pad + i * ((w - pad * 2) / n);
+  const y = v => h - 20 - (h - 30) * (v / max);
+  const line = msgSeries.map((p, i) => `${i ? "L" : "M"}${(x(i) + bw / 2).toFixed(1)},${(h - 20 - (h - 30) * (p.value / mmax)).toFixed(1)}`).join(" ");
+  return `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="overflow:visible">
+    <defs><linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b3df5"/><stop offset="1" stop-color="#9a8cff"/></linearGradient></defs>
+    ${series.map((p, i) => `<rect x="${x(i)}" y="${y(p.value)}" width="${bw}" height="${Math.max(0, h - 20 - y(p.value))}" rx="2" fill="url(#gg)"><title>${p.day}: ${money(p.value)}</title></rect>`).join("")}
+    <path d="${line}" fill="none" stroke="#0d9f6e" stroke-width="1.8"/>
+    <line x1="${pad}" x2="${w - pad}" y1="${h - 20}" y2="${h - 20}" stroke="#e5e3ee"/>
+    <text x="${pad}" y="${h - 6}" font-size="9" fill="#6a6879">${series[0].day}</text>
+    <text x="${w - pad}" y="${h - 6}" font-size="9" fill="#6a6879" text-anchor="end">${series[n - 1].day}</text>
+  </svg>
+  <div class="row mt8" style="gap:14px"><span class="tiny muted"><span class="dot" style="color:#5b3df5"></span> GMV</span>
+  <span class="tiny muted"><span class="dot" style="color:#0d9f6e"></span> messages sent</span></div>`;
+}
+
+/* --------------------------------------------------------------------- shops */
+page("/shops", async () => {
+  const q = new URLSearchParams({page: S.shops.page, per: 25, search: S.shops.search, status: S.shops.status,
+                                plan: S.shops.plan, sort: S.shops.sort});
+  const d = await api("/api/admin/shops?" + q);
+  return shell(`
+  <div class="card"><div class="bd">
+    <div class="row wrap" style="gap:8px">
+      <input class="input" style="flex:1;min-width:200px" id="shopSearch" placeholder="Search shop, owner email, city…" value="${esc(S.shops.search)}"
+        onkeydown="if(event.key==='Enter'){S.shops.search=this.value;S.shops.page=1;render('/shops')}">
+      <select class="input" style="width:auto" onchange="S.shops.status=this.value;S.shops.page=1;render('/shops')">
+        <option value="">All statuses</option>${["active", "trial", "paused", "churned"].map(s => `<option ${S.shops.status === s ? "selected" : ""}>${s}</option>`).join("")}
+      </select>
+      <select class="input" style="width:auto" onchange="S.shops.plan=this.value;S.shops.page=1;render('/shops')">
+        <option value="">All plans</option>${["starter", "growth", "scale"].map(s => `<option ${S.shops.plan === s ? "selected" : ""}>${s}</option>`).join("")}
+      </select>
+      <select class="input" style="width:auto" onchange="S.shops.sort=this.value;render('/shops')">
+        ${[["gmv", "Top GMV"], ["customers", "Most customers"], ["recovered", "Most recovered"], ["mrr", "Highest plan"], ["new", "Newest"], ["name", "A–Z"]].map(([v, l]) => `<option value="${v}" ${S.shops.sort === v ? "selected" : ""}>${l}</option>`).join("")}
+      </select>
+      <button class="btn" onclick="S.shops.search=$('#shopSearch').value;S.shops.page=1;render('/shops')">Search</button>
+      <div class="grow"></div>
+      <button class="btn primary" onclick="createShop()">＋ Onboard a shop</button>
+    </div>
+  </div></div>
+
+  <div class="card mt12">
+    <div class="scrollx"><table class="t"><thead><tr>
+      <th>Shop</th><th>Status</th><th>Plan</th><th class="right">Customers</th><th class="right">GMV</th>
+      <th class="right">Recovered</th><th class="right">Reply rate</th><th>Health</th><th class="right">Actions</th></tr></thead><tbody>
+      ${(d.rows || []).map(s => `<tr>
+        <td class="click" onclick="shopDetail(${s.id})"><div class="row" style="gap:8px">${avatar(s.name, 26)}
+          <div><b>${esc(s.name)}</b><div class="tiny muted">${esc(s.sector)} · ${esc(s.city)} · #${s.id}</div></div></div></td>
+        <td><span class="badge ${STATUS[s.status] || ""}">${esc(s.status)}</span></td>
+        <td><span class="badge brand">${esc(s.plan)}</span><div class="tiny muted">${money(s.monthly_price, s.currency)}</div></td>
+        <td class="right">${num(s.customers)}<div class="tiny muted">${num(s.sales)} sales</div></td>
+        <td class="right">${money(s.gmv)}<div class="tiny muted">${money(s.gmv_30d)} 30d</div></td>
+        <td class="right">${money(s.recovered)}<div class="tiny muted">${num(s.conversions)} conv.</div></td>
+        <td class="right">${pct(s.retention_score)}</td>
+        <td><span class="badge ${s.health === "healthy" ? "ok" : s.health === "quiet" ? "warn" : ""}">${esc(s.health || "—")}</span>
+          ${s.live_channels ? `<span class="badge info">${s.live_channels} live</span>` : ""}</td>
+        <td class="right nowrap">
+          <button class="btn sm" onclick="shopDetail(${s.id})">Inspect</button>
+          <button class="btn sm" onclick="impersonate(${s.id})">Open as shop</button>
+        </td></tr>`).join("") || `<tr><td colspan="9"><div class="empty"><div class="big">▦</div>No shops match</div></td></tr>`}
+    </tbody></table></div>
+    <div class="pager"><span>${num(d.total)} shops · page ${d.page} of ${d.pages}</span>
+      <button class="btn sm" ${d.page <= 1 ? "disabled" : ""} onclick="S.shops.page--;render('/shops')">← Prev</button>
+      <button class="btn sm" ${d.page >= d.pages ? "disabled" : ""} onclick="S.shops.page++;render('/shops')">Next →</button></div>
+  </div>`);
+});
+
+async function shopDetail(sid) {
+  const d = await api("/api/admin/shops/" + sid);
+  const s = d.shop, k = d.kpis, f = d.funnel || {};
+  const steps = [["Planned", f.scheduled], ["Sent", f.sent], ["Replied", f.replied], ["Converted", f.converted]];
+  const mx = Math.max(1, ...steps.map(x => x[1] || 0));
+  openModal(s.name, `
+  <div class="row wrap mb12" style="gap:6px">
+    <span class="badge ${STATUS[s.status]}">${esc(s.status)}</span><span class="badge brand">${esc(s.plan)} · ${money(s.monthly_price, s.currency)}</span>
+    <span class="badge">${esc(s.sector)}</span><span class="badge">${esc(s.city)}</span>
+    <span class="badge">since ${dt(s.created_at)}</span>
+    <div class="grow"></div>
+    <button class="btn sm" onclick="impersonate(${s.id})">Open as this shop ↗</button>
+  </div>
+  <div class="tiles mb12">
+    <div class="tile"><div class="v">${num(k.customers)}</div><div class="l">customers</div></div>
+    <div class="tile"><div class="v">${money(k.sales_total)}</div><div class="l">sales volume</div></div>
+    <div class="tile"><div class="v">${money(k.revenue_recovered)}</div><div class="l">recovered</div></div>
+    <div class="tile"><div class="v">${pct(k.reply_rate)}</div><div class="l">reply rate</div></div>
+    <div class="tile"><div class="v">${pct(k.conversion_rate)}</div><div class="l">conversion</div></div>
+    <div class="tile"><div class="v">${pct(k.retention_score)}</div><div class="l">retention score</div></div>
+    <div class="tile"><div class="v">${num(k.due_today)}</div><div class="l">due today</div></div>
+    <div class="tile"><div class="v">${num(k.at_risk)}</div><div class="l">at risk</div></div>
+  </div>
+  <div class="grid g2" style="gap:12px">
+    <div>
+      <div class="row mb8"><b style="font-size:12.5px">Reminder funnel (30d)</b></div>
+      ${steps.map(x => `<div style="margin-bottom:8px"><div class="row" style="justify-content:space-between"><span class="tiny">${x[0]}</span><b class="tiny">${num(x[1])}</b></div>
+        <div class="bar mt8"><i style="width:${Math.round(100 * (x[1] || 0) / mx)}%"></i></div></div>`).join("")}
+      <div class="hr"></div>
+      <b style="font-size:12.5px">Owner</b>
+      <div class="tiny muted mt8">${esc(d.owner ? d.owner.name + " · " + d.owner.email : s.owner_email)}</div>
+      <div class="tiny muted">Last login: ${dt(d.owner && d.owner.last_login)}</div>
+      <div class="hr"></div>
+      <b style="font-size:12.5px">Plan usage</b>
+      <div class="tiny muted mt8">${num(d.usage_vs_plan.customers)} / ${num(d.usage_vs_plan.limits.shops_customers)} customers ·
+        ${num(d.usage_vs_plan.messages_30d)} / ${num(d.usage_vs_plan.limits.messages)} messages (30d)</div>
+    </div>
+    <div>
+      <div class="row mb8"><b style="font-size:12.5px">Customer health</b></div>
+      ${(d.risk_mix || []).map(r => `<div class="statline"><span class="badge ${RISK[r.band] || ""}">${esc(r.band)}</span><b>${num(r.n)}</b></div>`).join("")}
+      <div class="hr"></div>
+      <div class="row mb8"><b style="font-size:12.5px">Channels</b><div class="grow"></div>
+        <button class="btn sm" onclick="closeModal();setShopStatus(${s.id},'${s.status === "active" ? "paused" : "active"}')">${s.status === "active" ? "Pause shop" : "Activate shop"}</button></div>
+      ${(d.channels || []).map(c => `<div class="statline"><span>${esc(c.channel)} <span class="tiny muted">(${esc(c.provider)})</span></span><b>${num(c.n)} <span class="tiny muted">${c.failed ? num(c.failed) + " failed" : ""}</b></div>`).join("") || `<div class="tiny muted">No messages</div>`}
+    </div>
+  </div>
+  <div class="hr"></div>
+  <b style="font-size:12.5px">Recent messages</b>
+  <div class="scrollx mt8" style="max-height:230px;overflow:auto"><table class="t"><thead><tr><th>When</th><th>Customer</th><th>Dir</th><th>Channel</th><th>Body</th><th>Status</th></tr></thead><tbody>
+    ${(d.recent_messages || []).map(m => `<tr><td class="tiny nowrap">${dt(m.created_at)}</td><td class="tiny">${esc(m.customer || "")}</td>
+      <td>${m.direction === "in" ? "↩ in" : "↗ out"}</td><td class="tiny">${esc(m.channel)}</td>
+      <td class="tiny" style="max-width:340px;white-space:normal">${esc((m.body || "").slice(0, 150))}</td>
+      <td><span class="badge ${m.status === "failed" ? "bad" : m.status === "delivered" || m.status === "replied" ? "ok" : ""}">${esc(m.status)}</span></td></tr>`).join("")}
+  </tbody></table></div>`, `<button class="btn" onclick="closeModal()">Close</button>`, true);
+}
+async function setShopStatus(sid, status) {
+  try { await api("/api/admin/shops/" + sid, {method: "PATCH", body: {status}}); toast("Shop " + status, "ok"); render(S.route); }
+  catch (e) { toast(e.message, "bad"); }
+}
+async function impersonate(sid) {
+  try {
+    const r = await api("/api/admin/shops/" + sid + "/impersonate", {method: "POST", body: {}});
+    toast("Impersonation session opened for 2 hours — redirecting…", "ok");
+    setTimeout(() => location.href = "/", 600);
+  } catch (e) { toast(e.message, "bad"); }
+}
+function createShop() {
+  openModal("Onboard a shop manually", `
+    <div class="grid g2" style="gap:10px">
+      <div class="field"><label class="f">Shop name</label><input class="input" id="nsName" placeholder="Nakato Hardware"></div>
+      <div class="field"><label class="f">Owner name</label><input class="input" id="nsOwner" placeholder="Doreen Nakato"></div>
+    </div>
+    <div class="grid g2" style="gap:10px">
+      <div class="field"><label class="f">Owner email (login)</label><input class="input" id="nsEmail" placeholder="owner@shop.ug"></div>
+      <div class="field"><label class="f">Phone</label><input class="input" id="nsPhone" placeholder="+256…"></div>
+    </div>
+    <div class="grid g3" style="gap:10px">
+      <div class="field"><label class="f">Sector</label><input class="input" id="nsSector" value="Retail"></div>
+      <div class="field"><label class="f">City</label><input class="input" id="nsCity" value="Kampala"></div>
+      <div class="field"><label class="f">Plan</label><select class="input" id="nsPlan"><option>starter</option><option>growth</option><option>scale</option></select></div>
+    </div>
+    <div class="field"><label class="f">Password (leave blank to auto-generate)</label><input class="input" id="nsPass" placeholder="auto"></div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="doCreateShop()">Create shop</button>`);
+}
+async function doCreateShop() {
+  try {
+    const r = await api("/api/admin/shops", {method: "POST", body: {
+      name: $("#nsName").value, owner_name: $("#nsOwner").value, owner_email: $("#nsEmail").value,
+      phone: $("#nsPhone").value, sector: $("#nsSector").value, city: $("#nsCity").value,
+      plan: $("#nsPlan").value, password: $("#nsPass").value || undefined}});
+    closeModal();
+    openModal("Shop created", `<div class="tiny">Hand these credentials to the owner:</div>
+      <div class="copybox mt8">${esc($("#nsEmail").value)} / ${esc(r.temporary_password)}</div>
+      <div class="tiny muted mt8">Login at <span class="mono">/#/login</span></div>`,
+      `<button class="btn primary" onclick="closeModal();render('/shops')">Done</button>`);
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+/* ----------------------------------------------------------------- messaging */
+page("/messaging", async () => {
+  const d = await api("/api/admin/messaging?days=" + S.days);
+  const t = d.totals || {};
+  return shell(`
+  <div class="row mb12"><div class="chips">${[7, 30, 90].map(x => `<span class="chip ${S.days === x ? "on" : ""}" onclick="S.days=${x};render('/messaging')">last ${x} days</span>`).join("")}</div></div>
+  <div class="grid g4">
+    <div class="card kpi brand"><div class="l">Messages out</div><div class="v">${num(t.outbound)}</div><div class="f">${num(t.inbound)} replies in</div></div>
+    <div class="card kpi"><div class="l">Delivered</div><div class="v">${num(t.delivered)}</div><div class="f">${num(t.queued)} still queued</div></div>
+    <div class="card kpi"><div class="l">Failed</div><div class="v">${num(t.failed)}</div><div class="f">${pct(t.outbound ? 100 * t.failed / t.outbound : 0)} of outbound</div></div>
+    <div class="card kpi"><div class="l">Est. cost (${S.days}d)</div><div class="v">$${(d.cost_estimate || {}).usd_30d || 0}</div><div class="f">${esc((d.cost_estimate || {}).note || "")}</div></div>
+  </div>
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>By provider &amp; channel</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Provider</th><th>Channel</th><th class="right">Sent</th><th class="right">Delivered</th><th class="right">Failed</th><th class="right">Rate</th></tr></thead><tbody>
+      ${(d.by_provider || []).map(p => `<tr><td><b>${esc(p.provider)}</b></td><td><span class="badge">${esc(p.channel)}</span></td>
+        <td class="right">${num(p.n)}</td><td class="right">${num(p.delivered)}</td><td class="right">${num(p.failed)}</td>
+        <td class="right">${pct(p.n ? 100 * p.delivered / p.n : 0)}</td></tr>`).join("") || `<tr><td colspan="6"><div class="empty">No messages yet</div></td></tr>`}
+      </tbody></table></div></div>
+    <div class="card"><div class="hd"><h3>Template usage</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Template</th><th>Channel</th><th class="right">Sent</th></tr></thead><tbody>
+      ${(d.templates || []).map(t2 => `<tr><td><span class="mono">${esc(t2.template_key)}</span></td><td><span class="badge">${esc(t2.channel)}</span></td><td class="right">${num(t2.n)}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty">No messages</div></td></tr>`}
+      </tbody></table></div></div>
+  </div>
+  <div class="card mt16"><div class="hd"><h3>Failures to investigate</h3><div class="grow"></div><span class="badge bad">${num((d.failures || []).length)} shown</span></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>When</th><th>Shop</th><th>Channel</th><th>To</th><th>Error</th></tr></thead><tbody>
+    ${(d.failures || []).map(f => `<tr><td class="tiny nowrap">${dt(f.created_at)}</td><td class="tiny">${esc(f.shop)}</td>
+      <td><span class="badge">${esc(f.channel)}</span></td><td class="tiny mono">${esc(f.to_addr)}</td>
+      <td class="tiny" style="max-width:420px;white-space:normal">${esc((f.error || "").slice(0, 200))}</td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">No failures — nice.</div></td></tr>`}
+    </tbody></table></div></div>`);
+});
+
+/* ----------------------------------------------------------------- retention */
+page("/retention", async () => {
+  const d = await api("/api/admin/retention?days=" + S.days);
+  const f = d.funnel || {};
+  const mx = Math.max(1, f.scheduled || 1);
+  const steps = [["Planned", f.scheduled], ["Sent", f.sent], ["Delivered", f.delivered], ["Replied", f.replied], ["Converted", f.converted]];
+  return shell(`
+  <div class="row mb12"><div class="chips">${[7, 30, 90].map(x => `<span class="chip ${S.days === x ? "on" : ""}" onclick="S.days=${x};render('/retention')">last ${x} days</span>`).join("")}</div></div>
+  <div class="grid g4">
+    <div class="card kpi brand"><div class="l">Revenue recovered</div><div class="v">${money(f.revenue)}</div><div class="f">${num(f.converted)} conversions</div></div>
+    <div class="card kpi"><div class="l">Messages sent</div><div class="v">${num(f.sent)}</div><div class="f">${num(f.cancelled)} cancelled before send</div></div>
+    <div class="card kpi"><div class="l">Replies</div><div class="v">${num(f.replied)}</div><div class="f">${pct(f.sent ? 100 * f.replied / f.sent : 0)} reply rate</div></div>
+    <div class="card kpi"><div class="l">Conversion</div><div class="v">${pct(f.sent ? 100 * f.converted / f.sent : 0)}</div><div class="f">reminder → purchase</div></div>
+  </div>
+  <div class="grid g21 mt16">
+    <div class="card"><div class="hd"><h3>Fleet funnel</h3></div><div class="bd">
+      ${steps.map(s => `<div style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><span>${s[0]}</span><b>${num(s[1])}</b></div>
+        <div class="bar mt8"><i style="width:${Math.round(100 * (s[1] || 0) / mx)}%"></i></div></div>`).join("")}
+    </div></div>
+    <div class="card"><div class="hd"><h3>Budget guardrails</h3></div><div class="bd">
+      <div class="statline"><span class="muted">Customers</span><b>${num((d.repeat_rate || {}).customers)}</b></div>
+      <div class="statline"><span class="muted">Repeat customers</span><b>${num((d.repeat_rate || {}).repeat)} (${pct((d.repeat_rate || {}).customers ? 100 * d.repeat_rate.repeat / d.repeat_rate.customers : 0)})</b></div>
+      <div class="statline"><span class="muted">Avg visits / customer</span><b>${Number((d.repeat_rate || {}).avg_visits || 0).toFixed(1)}</b></div>
+      <div class="statline"><span class="muted">Avg lifetime spend</span><b>${money((d.repeat_rate || {}).avg_spend)}</b></div>
+      <div class="statline"><span class="muted">Opt-outs</span><b>${num(d.opt_outs)}</b></div>
+      <div class="hr"></div>
+      ${(d.customer_risk || []).map(r => `<div class="statline"><span class="badge ${RISK[r.band] || ""}">${esc(r.band)}</span><b>${num(r.n)}</b></div>`).join("")}
+    </div></div>
+  </div>
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>By reminder kind</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Kind</th><th class="right">Sent</th><th class="right">Converted</th><th class="right">Revenue</th><th class="right">Rate</th></tr></thead><tbody>
+      ${(d.by_kind || []).map(k => `<tr><td><span class="badge">${esc(k.kind)}</span></td><td class="right">${num(k.sent)}</td>
+        <td class="right">${num(k.converted)}</td><td class="right">${money(k.revenue)}</td><td class="right">${pct(k.sent ? 100 * k.converted / k.sent : 0)}</td></tr>`).join("")}
+      </tbody></table></div></div>
+    <div class="card"><div class="hd"><h3>By sector</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Sector</th><th class="right">Reminders</th><th class="right">Converted</th><th class="right">Revenue</th></tr></thead><tbody>
+      ${(d.by_sector || []).map(s => `<tr><td>${esc(s.sector)}</td><td class="right">${num(s.reminders)}</td>
+        <td class="right">${num(s.converted)}</td><td class="right">${money(s.revenue)}</td></tr>`).join("")}
+      </tbody></table></div></div>
+  </div>
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>Best performing shops</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Shop</th><th class="right">Sent</th><th class="right">Converted</th><th class="right">Revenue</th></tr></thead><tbody>
+      ${(d.top_shops || []).map(s => `<tr class="click" onclick="shopDetail(${s.id})"><td><b>${esc(s.name)}</b><div class="tiny muted">${esc(s.sector)}</div></td>
+        <td class="right">${num(s.sent)}</td><td class="right">${num(s.converted)}</td><td class="right">${money(s.revenue)}</td></tr>`).join("")}
+      </tbody></table></div></div>
+    <div class="card"><div class="hd"><h3>Reply intents detected</h3></div><div class="bd">
+      ${(d.reply_intent_mix || []).map(i => `<div class="statline"><span class="badge ${i.intent === "opt_out" ? "bad" : i.intent === "order" ? "ok" : ""}">${esc(i.intent)}</span><b>${num(i.n)}</b></div>`).join("") || `<div class="empty tiny">No replies yet</div>`}
+    </div></div>
+  </div>`);
+});
+
+/* ------------------------------------------------------------------- revenue */
+page("/revenue", async () => {
+  const d = await api("/api/admin/revenue");
+  const mx = Math.max(1, ...Object.values(d.by_plan || {}).map(p => p.mrr));
+  return shell(`
+  <div class="grid g4">
+    <div class="card kpi brand"><div class="l">MRR (active + trial)</div><div class="v">${money(d.mrr)}</div><div class="f">ARR ${money(d.arr)}</div></div>
+    <div class="card kpi"><div class="l">Active MRR</div><div class="v">${money(d.active_mrr)}</div><div class="f">paying shops only</div></div>
+    <div class="card kpi"><div class="l">ARPU</div><div class="v">${money(d.arpu)}</div><div class="f">per shop / month</div></div>
+    <div class="card kpi"><div class="l">GMV processed</div><div class="v">${money(d.gmv_processed)}</div><div class="f">all shops, all time</div></div>
+  </div>
+  <div class="grid g21 mt16">
+    <div class="card"><div class="hd"><h3>MRR by plan</h3></div><div class="bd">
+      ${Object.entries(d.by_plan || {}).map(([plan, v]) => `<div style="margin-bottom:12px">
+        <div class="row" style="justify-content:space-between"><b style="text-transform:capitalize">${esc(plan)}</b>
+          <span class="tiny muted">${num(v.shops)} shops (${num(v.active)} active) · ${money(v.mrr)}</span></div>
+        <div class="bar mt8"><i style="width:${Math.round(100 * v.mrr / mx)}%"></i></div></div>`).join("")}
+      <div class="hr"></div>
+      <div class="tiles">
+        <div class="tile"><div class="v">${num(d.trial_conversions.in_trial)}</div><div class="l">shops in trial</div></div>
+        <div class="tile"><div class="v">${num(d.trial_conversions.converted)}</div><div class="l">converted to paid</div></div>
+        <div class="tile"><div class="v">${num(d.trial_conversions.expiring_7d)}</div><div class="l">trial ends ≤ 7d</div></div>
+      </div>
+      <div class="tiny muted mt12">${esc(d.take_rate_note)}</div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Plan catalogue</h3></div><div class="bd">
+      ${Object.entries(d.plan_limits || {}).map(([p, l]) => `<div class="statline"><span style="text-transform:capitalize"><b>${esc(p)}</b><div class="tiny muted">${num(l.shops_customers)} customers · ${num(l.messages)} msgs/mo</div></span>
+        <b>${money(l.price)}</b></div>`).join("")}
+    </div></div>
+  </div>
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>Shop growth by month</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Month</th><th class="right">Shops added</th><th class="right">MRR added</th></tr></thead><tbody>
+      ${(d.growth || []).map(g => `<tr><td>${esc(g.month)}</td><td class="right">${num(g.shops)}</td><td class="right">${money(g.mrr)}</td></tr>`).join("")}
+      </tbody></table></div></div>
+    <div class="card"><div class="hd"><h3>Top paying shops</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Shop</th><th>Plan</th><th class="right">Monthly</th><th>Status</th></tr></thead><tbody>
+      ${(d.top_paying || []).map(s => `<tr class="click" onclick="shopDetail(${s.id})"><td><b>${esc(s.name)}</b><div class="tiny muted">${esc(s.sector)}</div></td>
+        <td><span class="badge brand">${esc(s.plan)}</span></td><td class="right">${money(s.monthly_price)}</td><td><span class="badge ${STATUS[s.status] || ""}">${esc(s.status)}</span></td></tr>`).join("")}
+      </tbody></table></div></div>
+  </div>`);
+});
+
+/* --------------------------------------------------------------------- queue */
+page("/queue", async () => {
+  const d = await api("/api/admin/queue");
+  const w = d.worker || {};
+  return shell(`
+  <div class="grid g4">
+    <div class="card kpi brand"><div class="l">Worker</div><div class="v" style="font-size:16px">${w.last_tick && w.last_tick !== "never" ? "Running" : "Idle"}</div>
+      <div class="f">last tick ${dt(w.last_tick)} · every ${w.interval_seconds}s</div></div>
+    <div class="card kpi"><div class="l">Ticks completed</div><div class="v">${num(w.tick_count)}</div><div class="f">${esc(w.mode || "")}</div></div>
+    <div class="card kpi"><div class="l">Due right now</div><div class="v">${num(d.due_now)}</div><div class="f">reminders waiting to send</div></div>
+    <div class="card kpi"><div class="l">Stuck / failed</div><div class="v">${num((d.stuck || []).length)}</div><div class="f">messages needing a look</div></div>
+  </div>
+  <div class="card mt16"><div class="hd"><h3>Last tick result</h3><div class="grow"></div><button class="btn sm primary" onclick="tickNow(this)">⚡ Run a tick now</button></div>
+    <div class="bd"><div class="tiles">
+      ${Object.entries(w.last_stats || {}).map(([k, v]) => `<div class="tile"><div class="v">${num(v)}</div><div class="l">${esc(k)}</div></div>`).join("") || `<div class="empty tiny">No tick recorded yet</div>`}
+    </div></div></div>
+  <div class="grid g3 mt16">
+    <div class="card"><div class="hd"><h3>Reminders by status</h3></div><div class="bd">
+      ${(d.reminders_by_status || []).map(s => `<div class="statline"><span class="badge">${esc(s.status)}</span><b>${num(s.n)}</b></div>`).join("")}
+    </div></div>
+    <div class="card"><div class="hd"><h3>Messages by status</h3></div><div class="bd">
+      ${(d.messages_by_status || []).map(s => `<div class="statline"><span class="badge">${esc(s.status)}</span><b>${num(s.n)}</b></div>`).join("")}
+    </div></div>
+    <div class="card"><div class="hd"><h3>Next 7 days</h3></div><div class="bd" style="max-height:260px;overflow:auto">
+      ${(d.due_by_day || []).map(x => `<div class="statline"><span>${esc(x.day)}</span><b>${num(x.n)}</b></div>`).join("") || `<div class="empty tiny">Nothing scheduled</div>`}
+    </div></div>
+  </div>
+  <div class="card mt16"><div class="hd"><h3>Stuck &amp; failed messages</h3></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>When</th><th>Shop</th><th>Channel</th><th>Status</th><th>Error</th></tr></thead><tbody>
+    ${(d.stuck || []).map(m => `<tr><td class="tiny nowrap">${dt(m.created_at)}</td><td class="tiny">${esc(m.shop)}</td>
+      <td><span class="badge">${esc(m.channel)}</span></td><td><span class="badge ${m.status === "failed" ? "bad" : "warn"}">${esc(m.status)}</span></td>
+      <td class="tiny" style="max-width:440px;white-space:normal">${esc((m.error || "").slice(0, 200))}</td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">Queue is clear</div></td></tr>`}
+    </tbody></table></div></div>`);
+});
+
+/* --------------------------------------------------------------- credentials */
+page("/credentials", async () => {
+  const [d, m] = await Promise.all([api("/api/admin/credentials"), api("/api/admin/messaging?days=1")]);
+  const health = {};
+  for (const p of (m.providers || [])) health[p.channel] = p;
+  return shell(`
+  <div class="card"><div class="bd">
+    <div class="tiny muted">Platform credentials apply to every shop that has not configured its own. Anything left on <span class="badge warn">sandbox</span> simulates delivery and replies, so the product still works end-to-end without a provider account.</div>
+    <div class="grid g3 mt12">
+      ${(d.channels || []).map(c => `<div class="card" style="box-shadow:none">
+        <div class="hd"><b style="text-transform:capitalize">${esc(c.channel)}</b><div class="grow"></div>
+          <span class="badge ${c.driver === "sandbox" ? "warn" : "ok"}">${esc(c.driver)}</span></div>
+        <div class="bd">
+          <div class="statline"><span class="muted">Active driver</span><b>${esc(c.active_driver)}</b></div>
+          <div class="statline"><span class="muted">Enabled</span><b>${c.enabled ? "yes" : "no"}</b></div>
+          <div class="statline"><span class="muted">Shops overriding</span><b>${num(c.shops_overriding)}</b></div>
+          <div class="statline"><span class="muted">Env vars present</span><b>${c.env_available ? "yes" : "no"}</b></div>
+          <div class="hr"></div>
+          ${Object.entries(c.config || {}).map(([k, v]) => `<div class="tiny muted"><span class="mono">${esc(k)}</span> = <span class="mono">${esc(String(v)).slice(0, 30)}</span></div>`).join("") || `<div class="tiny muted">No stored config</div>`}
+          <button class="btn primary sm mt12" style="width:100%;justify-content:center" onclick='credModal(${JSON.stringify(c.channel)}, ${JSON.stringify(c.schema)}, ${JSON.stringify(c.driver)}, ${c.enabled})'>Configure ${esc(c.channel)}</button>
+        </div></div>`).join("")}
+    </div>
+  </div></div>
+
+  <div class="card mt16"><div class="hd"><h3>Webhook endpoints to register</h3></div><div class="bd">
+    <div class="tiny muted mb8">Point your provider dashboards here. On Vercel use your deployment URL as the base.</div>
+    ${Object.entries(d.webhooks || {}).map(([k, v]) => `<div class="row" style="gap:8px;margin-bottom:6px"><span class="badge" style="min-width:120px">${esc(k)}</span><div class="copybox" style="flex:1">${esc(location.origin + v)}</div></div>`).join("")}
+    <div class="tiny muted mt12">WhatsApp also needs the verify token and app secret you save above; the cron endpoint needs <span class="mono">CRON_SECRET</span> as a Bearer token (or <span class="mono">?secret=</span>).</div>
+  </div></div>
+
+  <div class="card mt16"><div class="hd"><h3>Provider health</h3></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>Channel</th><th>Driver</th><th>Live</th><th>Last send</th><th>24h failures</th><th>Notes</th></tr></thead><tbody>
+    ${(d.channels || []).map(c => { const h = health[c.channel] || {}; const l24 = h.last_24h || {};
+      return `<tr><td><b style="text-transform:capitalize">${esc(c.channel)}</b></td><td><span class="badge">${esc(c.active_driver)}</span></td>
+      <td>${c.active_driver === "sandbox" ? `<span class="badge warn">sandbox</span>` : `<span class="badge ok">live</span>`}</td>
+      <td class="tiny">${num(l24.n)} in 24h</td><td class="tiny">${l24.failed ? `<span class="badge bad">${num(l24.failed)}</span>` : "0"}</td>
+      <td class="tiny muted" style="max-width:420px;white-space:normal">${num(h.shops_with_own_credentials)} shop(s) with own credentials</td></tr>`; }).join("")}
+    </tbody></table></div></div>`);
+});
+function credModal(channel, schema, driver, enabled) {
+  const label = {whatsapp: "Meta WhatsApp Cloud API", sms: "Twilio SMS", email: "SMTP email"}[channel];
+  openModal("Configure " + label, `
+    <div class="field"><label class="f">Driver</label>
+      <select class="input" id="cdDriver">
+        <option value="sandbox" ${driver === "sandbox" ? "selected" : ""}>sandbox (simulated)</option>
+        <option value="${channel === "whatsapp" ? "meta" : channel === "sms" ? "twilio" : "smtp"}" ${driver !== "sandbox" ? "selected" : ""}>${label}</option>
+      </select></div>
+    ${Object.entries(schema || {}).map(([k, hint]) => `<div class="field"><label class="f">${esc(k)}</label>
+      <input class="input" id="cc_${esc(k)}" placeholder="${esc(hint)}" ${/token|password|secret/.test(k) ? 'type="password"' : ""}></div>`).join("")}
+    <label class="row tiny" style="gap:6px;margin-top:6px"><input type="checkbox" id="cdEnabled" ${enabled ? "checked" : ""}> Enabled for all shops without their own credentials</label>
+    <div class="hr"></div>
+    <div class="row"><input class="input" id="cdTestTo" placeholder="test destination (+256… / email)"><button class="btn" onclick="testCred('${channel}')">Send test</button></div>
+    <div class="tiny muted mt8" id="cdTestOut"></div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveCred('${channel}')">Save credentials</button>`);
+}
+async function saveCred(channel) {
+  const cfg = {};
+  $$("[id^=cc_]").forEach(i => { if (i.value.trim()) cfg[i.id.slice(3)] = i.value.trim(); });
+  try {
+    await api("/api/admin/credentials", {method: "POST", body: {channel, driver: $("#cdDriver").value, config: cfg, enabled: $("#cdEnabled").checked}});
+    closeModal(); toast("Credentials saved", "ok"); render("/credentials");
+  } catch (e) { toast(e.message, "bad"); }
+}
+async function testCred(channel) {
+  const cfg = {};
+  $$("[id^=cc_]").forEach(i => { if (i.value.trim()) cfg[i.id.slice(3)] = i.value.trim(); });
+  const out = $("#cdTestOut");
+  out.textContent = "Sending…";
+  try {
+    const r = await api("/api/admin/credentials/test", {method: "POST", body: {channel, driver: $("#cdDriver").value, config: cfg, to: $("#cdTestTo").value}});
+    out.innerHTML = r.ok ? `<span class="badge ok">sent</span> ${esc(r.detail || "")}` : `<span class="badge bad">failed</span> ${esc(r.detail || "")}`;
+  } catch (e) { out.innerHTML = `<span class="badge bad">failed</span> ${esc(e.message)}`; }
+}
+
+/* ------------------------------------------------------------------ capacity */
+page("/capacity", async () => {
+  const d = await api("/api/admin/capacity");
+  const p = d.projection_1000_shops || {};
+  return shell(`
+  <div class="grid g4">
+    <div class="card kpi brand"><div class="l">Database size</div><div class="v">${d.db_size_mb} MB</div><div class="f">${num(d.total_rows)} rows across ${Object.keys(d.row_counts || {}).length} tables</div></div>
+    <div class="card kpi"><div class="l">Shops on this node</div><div class="v">${num((d.row_counts || {}).shops)}</div><div class="f">projection below covers 1,000</div></div>
+    <div class="card kpi"><div class="l">Customers</div><div class="v">${num((d.row_counts || {}).customers)}</div><div class="f">${num((d.row_counts || {}).sales)} sales · ${num((d.row_counts || {}).sale_items)} line items</div></div>
+    <div class="card kpi"><div class="l">Worker</div><div class="v" style="font-size:15px">every ${(d.worker || {}).interval_seconds}s</div><div class="f">${num((d.worker || {}).ticks)} ticks · last ${dt((d.worker || {}).last_tick)}</div></div>
+  </div>
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>Query latency (ms)</h3><div class="tiny muted">hot paths, measured live</div></div>
+      <div class="bd">
+      ${Object.entries(d.query_timings_ms || {}).map(([k, v]) => `<div style="margin-bottom:9px">
+        <div class="row" style="justify-content:space-between"><span class="mono tiny">${esc(k)}</span><b class="tiny">${typeof v === "number" ? v : esc(v)} ms</b></div>
+        <div class="bar mt8"><i style="width:${typeof v === "number" ? Math.min(100, v * 8) : 4}%;background:${typeof v === "number" && v < 5 ? "#0d9f6e" : "#b7791f"}"></i></div></div>`).join("")}
+      <div class="tiny muted">Indexes in use: ${(d.indexes || []).map(i => `<span class="mini-chip">${esc(i.name)}</span>`).join(" ")}</div>
+      </div></div>
+    <div class="card"><div class="hd"><h3>Projection at 1,000 shops</h3></div><div class="bd">
+      <div class="statline"><span class="muted">Customers</span><b>${num(p.customers)}</b></div>
+      <div class="statline"><span class="muted">Messages per month</span><b>${num(p.messages_per_month)}</b></div>
+      <div class="statline"><span class="muted">Estimated DB size</span><b>${num(p.estimated_db_mb)} MB</b></div>
+      <div class="hr"></div>
+      <div class="tiny muted">${esc(p.recommendation || "")}</div>
+      <div class="hr"></div>
+      <div class="tiny muted">Per-shop average rows: ${Object.entries(d.per_shop_avg || {}).map(([k, v]) => `<span class="mini-chip">${esc(k)} ${v}</span>`).join(" ")}</div>
+    </div></div>
+  </div>
+  <div class="card mt16"><div class="hd"><h3>Row counts</h3></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>Table</th><th class="right">Rows</th></tr></thead><tbody>
+    ${Object.entries(d.row_counts || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td class="mono">${esc(k)}</td><td class="right">${num(v)}</td></tr>`).join("")}
+    </tbody></table></div></div>`);
+});
+
+/* --------------------------------------------------------------------- audit */
+page("/audit", async () => {
+  const d = await api("/api/admin/audit?limit=200");
+  return shell(`
+  <div class="card"><div class="hd"><h3>Recent activity</h3><div class="grow"></div>
+    <input class="input" style="width:200px" id="auditFilter" placeholder="filter by action…" onkeydown="if(event.key==='Enter')loadAudit(this.value)"></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Shop</th><th>Detail</th></tr></thead><tbody>
+    ${(d.rows || []).map(a => `<tr><td class="tiny nowrap">${dt(a.created_at)}</td><td class="tiny">${esc(a.actor || "")}</td>
+      <td><span class="badge">${esc(a.action)}</span></td><td class="tiny">${esc(a.shop || (a.shop_id ? "#" + a.shop_id : "platform"))}</td>
+      <td class="tiny muted" style="max-width:460px;white-space:normal">${esc((a.detail || "").slice(0, 200))}</td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">Nothing logged yet</div></td></tr>`}
+    </tbody></table></div></div>
+  <div class="card mt16"><div class="hd"><h3>Action mix</h3></div><div class="bd">
+    <div class="chips">${(d.actions || []).map(a => `<span class="chip">${esc(a.action)} · ${num(a.n)}</span>`).join("")}</div>
+  </div></div>`);
+});
+async function loadAudit(q) {
+  const d = await api("/api/admin/audit?limit=200&action=" + encodeURIComponent(q));
+  toast(`Filtered: ${num((d.rows || []).length)} entries`, "ok");
+  render("/audit");
+}
+
+/* ---------------------------------------------------------------------- boot */
+window.addEventListener("DOMContentLoaded", boot);
+if (document.readyState !== "loading") boot();
+</script>
+</body>
+</html>

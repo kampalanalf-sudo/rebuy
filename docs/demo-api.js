@@ -504,7 +504,8 @@ const Rebuy = (() => {
         "font:500 12px/1.5 system-ui,sans-serif;padding:9px 16px;text-align:center;border-top:1px solid #1e293b";
       bar.innerHTML = "<b>Live demo snapshot</b> &middot; " + demo.shop.name + " &middot; data as of " +
         demo.generated_at.slice(0, 16) + " &middot; read-only: buttons that save are disabled here. " +
-        "Full app + API: run <code>python3 serve.py</code>, or see the Supabase deployment.";
+        "<a href=\"admin.html\" style=\"color:#93c5fd\">Platform admin &rarr;</a> &middot; " +
+        "full app + API: run <code>python3 serve.py</code>.";
       document.body.appendChild(bar);
       document.body.style.paddingBottom = "44px";
     });

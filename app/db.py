@@ -798,7 +798,12 @@ def scalar(sql: str, params: tuple | list = (), default=None):
     if not rows:
         return default
     row = rows[0]
-    val = list(row.values())[0] if not isinstance(row, (int, float, str)) else row
+    if isinstance(row, (int, float, str)):
+        val = row
+    elif hasattr(row, "values"):          # dict / psycopg2 RealDictRow
+        val = list(row.values())[0]
+    else:                                  # sqlite3.Row supports index access only
+        val = row[0]
     if val is None:
         return default
     return val
