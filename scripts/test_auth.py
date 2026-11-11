@@ -282,6 +282,42 @@ os.environ["REBUY_ENV"] = _prev_env or "development"
 os.environ.pop("REBUY_SEED_DEMO", None)
 importlib.reload(_cfg)
 
+# ------------------------------------------------------------------ static page
+# Every browser sends Accept-Encoding: gzip, so a stale .gz twin serves the old
+# page to every visitor while a plain curl shows the new one. That exact bug
+# shipped once. These checks make it impossible to ship silently again.
+def test_static_gzip_twins():
+    import gzip
+    import os
+    from app import httpd
+
+    root = os.path.dirname(ROOT)
+    for name in ("index.html", "admin.html"):
+        raw = os.path.join(root, "static", name)
+        gz = raw + ".gz"
+        if not os.path.exists(raw):
+            continue
+        check(f"{name}: gzip twin exists", os.path.exists(gz),
+              "run python3 scripts/resync_static.py")
+        if not os.path.exists(gz):
+            continue
+        # the twin must decompress to exactly the current file
+        with open(gz, "rb") as f:
+            same = gzip.decompress(f.read()) == open(raw, "rb").read()
+        check(f"{name}: gzip twin matches source", same,
+              "stale twin — run scripts/resync_static.py")
+        check(f"{name}: twin not reported stale", not httpd._gz_is_stale(gz, raw))
+
+    # a deliberately stale twin must be refused rather than served
+    bad = os.path.join(ROOT, "_stale_test.html.gz")
+    with gzip.open(bad, "wb") as f:
+        f.write(b"<html>old</html>")
+    check("a stale twin is detected", httpd._gz_is_stale(bad, os.path.join(root, "static", "index.html")))
+    os.unlink(bad)
+
+
+test_static_gzip_twins()
+
 print(f"\n\033[1m{len(PASSED)} passed, {len(FAILED)} failed\033[0m")
 if FAILED:
     print("failed:", ", ".join(FAILED))

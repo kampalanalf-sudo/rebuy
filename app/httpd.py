@@ -6,6 +6,7 @@ api/index.py, so local, Docker and Vercel all run identical code.
 from __future__ import annotations
 
 import json
+import gzip
 import os
 import re
 import urllib.parse
@@ -156,9 +157,39 @@ def _json(payload, status: int = 200, extra_headers: dict | None = None) -> tupl
 STATIC_GZ_DIR = os.environ.get("REBUY_STATIC_GZ", STATIC_DIR)
 
 
+def _gz_is_stale(gz_path: str, raw_path: str) -> bool:
+    """True when the pre-compressed twin no longer matches its source file.
+
+    A gzip stream ends with the uncompressed size (ISIZE), so the comparison is
+    a 4-byte read rather than a decompression. Size alone can coincide, so the
+    modification time is a second signal.
+    """
+    if not os.path.isfile(raw_path):
+        return True          # nothing to serve the twin for
+    try:
+        # ISIZE is the uncompressed length recorded in the gzip trailer. It is
+        # a cheap first test, but two different revisions can share a byte
+        # count, so it cannot be the only one.
+        with open(gz_path, "rb") as f:
+            f.seek(-4, os.SEEK_END)
+            isize = int.from_bytes(f.read(4), "little")
+        if int(isize) != os.path.getsize(raw_path):
+            return True
+        with gzip.open(gz_path, "rb") as f:
+            return f.read() != open(raw_path, "rb").read()
+    except (OSError, ValueError):
+        return True          # unreadable twin: fall back to the source file
+
+
 def _send_gzip(rel: str, ctype: str) -> tuple[int, dict, bytes] | None:
     gz_path = os.path.join(STATIC_GZ_DIR, rel + ".gz")
     if not os.path.isfile(gz_path):
+        return None
+    # A stale twin silently serves the OLD page to every browser, because every
+    # browser sends Accept-Encoding: gzip. The twin must never win over a newer
+    # source file, so it is checked against the raw file first.
+    raw_path = os.path.join(STATIC_DIR, rel)
+    if _gz_is_stale(gz_path, raw_path):
         return None
     with open(gz_path, "rb") as f:
         data = f.read()
