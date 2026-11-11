@@ -63,6 +63,28 @@ echo "$H" | grep -qi "strict-origin-when-cross-origin" \
   && { P=$((P+1)); printf "  \033[32mPASS\033[0m referrer policy\n"; } \
   || { F=$((F+1)); printf "  \033[31mFAIL\033[0m referrer policy\n"; }
 
+echo "== AI nudges / location =="
+t "$(code -b "$C" "$B/api/nudges/insights")" 200 "nudge insights readable"
+t "$(code -b "$C" "$B/api/nudges/places")" 200 "places list readable"
+t "$(code -b "$C" "$B/api/nudges/settings")" 200 "nudge settings readable"
+t "$(code -b "$C" -X PATCH "$B/api/nudges/settings" -H 'content-type: application/json' \
+     -d '{"max_per_week":2}')" 200 "nudge settings writable"
+INS=$(curl -s -b "$C" "$B/api/nudges/insights")
+echo "$INS" | grep -q '"verdict"' \
+  && { P=$((P+1)); printf "  \033[32mPASS\033[0m insights carry a lift verdict\n"; } \
+  || { F=$((F+1)); printf "  \033[31mFAIL\033[0m insights carry a lift verdict\n"; }
+# a fresh shop has no decisions yet, so the explanation array is legitimately absent;
+# what must always be present is the container key the cockpit renders from.
+echo "$INS" | grep -q '"recent"' \
+  && { P=$((P+1)); printf "  \033[32mPASS\033[0m insights expose the decision log\n"; } \
+  || { F=$((F+1)); printf "  \033[31mFAIL\033[0m insights expose the decision log\n"; }
+echo "$INS" | grep -q '"consent"' \
+  && { P=$((P+1)); printf "  \033[32mPASS\033[0m insights expose the consent funnel\n"; } \
+  || { F=$((F+1)); printf "  \033[31mFAIL\033[0m insights expose the consent funnel\n"; }
+# unauthenticated device API must refuse
+t "$(code -X POST "$B/api/native/location" -H 'content-type: application/json' -d '{"lat":0.34,"lng":32.58,"accuracy":30}')" 401 "location needs a paired device"
+t "$(code -X POST "$B/api/native/pair" -H 'content-type: application/json' -d '{"code":"000000"}')" 400 "bad pairing code rejected"
+
 echo "== logout =="
 curl -s -b "$C" -X POST "$B/api/auth/logout" -o /dev/null
 t "$(code -b "$C" "$B/api/shop")" 401 "session dead after logout"

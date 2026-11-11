@@ -211,6 +211,133 @@ CREATE TABLE IF NOT EXISTS sale_items (
 CREATE INDEX IF NOT EXISTS idx_items_sale ON sale_items(sale_id);
 CREATE INDEX IF NOT EXISTS idx_items_deplete ON sale_items(shop_id, depletes_on);
 
+CREATE TABLE IF NOT EXISTS shop_places (          -- physical branches, geofenced
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id     INTEGER NOT NULL,
+  label       TEXT DEFAULT 'Main branch',
+  address     TEXT DEFAULT '',
+  lat         REAL NOT NULL,
+  lng         REAL NOT NULL,
+  radius_m    INTEGER DEFAULT 400,
+  open_from   TEXT DEFAULT '07:00',
+  open_to     TEXT DEFAULT '21:00',
+  active      INTEGER DEFAULT 1,
+  created_at  TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_places_shop ON shop_places(shop_id);
+
+CREATE TABLE IF NOT EXISTS consents (             -- one row per customer per purpose
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER NOT NULL,
+  shop_id     INTEGER NOT NULL,
+  purpose     TEXT NOT NULL,                     -- location | marketing | analytics
+  granted     INTEGER DEFAULT 0,
+  source      TEXT DEFAULT '',                   -- app | web | sale | staff
+  granted_at  TEXT,
+  revoked_at  TEXT,
+  updated_at  TEXT NOT NULL,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_consent ON consents(customer_id, purpose);
+
+CREATE TABLE IF NOT EXISTS devices (              -- native app installs
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id  INTEGER,
+  shop_id      INTEGER,
+  token_hash   TEXT NOT NULL UNIQUE,
+  platform     TEXT DEFAULT 'android',
+  push_token   TEXT DEFAULT '',
+  app_version  TEXT DEFAULT '',
+  lat          REAL,
+  lng          REAL,
+  accuracy_m   REAL,
+  last_seen_at TEXT,
+  created_at   TEXT NOT NULL,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_devices_customer ON devices(customer_id);
+CREATE INDEX IF NOT EXISTS idx_devices_shop ON devices(shop_id);
+
+CREATE TABLE IF NOT EXISTS visits (               -- geofence entry/exit events
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id     INTEGER NOT NULL,
+  place_id    INTEGER,
+  customer_id INTEGER,
+  device_id   INTEGER,
+  event       TEXT DEFAULT 'enter',              -- enter | exit | dwell
+  lat         REAL,
+  lng         REAL,
+  distance_m  REAL,
+  dwell_min   INTEGER DEFAULT 0,
+  sale_id     INTEGER,                           -- attributed purchase, if any
+  created_at  TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_visits_shop_time ON visits(shop_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_visits_customer ON visits(customer_id);
+
+CREATE TABLE IF NOT EXISTS nudge_decisions (      -- every AI decision, and why
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id       INTEGER NOT NULL,
+  customer_id   INTEGER,
+  reminder_id   INTEGER,
+  trigger_kind  TEXT DEFAULT 'time',              -- time | proximity | visit | intent | weather
+  product_name  TEXT DEFAULT '',
+  score         REAL DEFAULT 0,
+  expected_value REAL DEFAULT 0,
+  send          INTEGER DEFAULT 0,
+  reason        TEXT DEFAULT '',
+  features      TEXT DEFAULT '{}',
+  discount_pct  REAL DEFAULT 0,
+  channel       TEXT DEFAULT '',
+  send_at       TEXT DEFAULT '',                  -- best-time slot
+  outcome       TEXT DEFAULT '',                  -- opened | replied | converted | ignored
+  revenue       REAL DEFAULT 0,
+  created_at    TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_nd_shop ON nudge_decisions(shop_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_nd_reminder ON nudge_decisions(reminder_id);
+
+CREATE TABLE IF NOT EXISTS nudge_sends (          -- throttle: one nudge per customer per window
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id     INTEGER NOT NULL,
+  customer_id INTEGER NOT NULL,
+  kind        TEXT DEFAULT 'proximity',
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ns_lookup ON nudge_sends(shop_id, customer_id, created_at);
+
+CREATE TABLE IF NOT EXISTS nudge_settings (       -- per-shop knobs, one row
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id             INTEGER NOT NULL UNIQUE,
+  enabled             INTEGER DEFAULT 1,
+  proximity_enabled   INTEGER DEFAULT 1,
+  ai_scoring          INTEGER DEFAULT 1,
+  min_score           REAL DEFAULT 45,
+  max_per_week        INTEGER DEFAULT 2,
+  quiet_minutes       INTEGER DEFAULT 240,
+  max_discount_pct    REAL DEFAULT 15,
+  discount_aggressiveness REAL DEFAULT 0.5,       -- 0 = never discount, 1 = discount early
+  best_time_enabled   INTEGER DEFAULT 1,
+  weather_aware       INTEGER DEFAULT 0,
+  updated_at          TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS push_tokens (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id INTEGER,
+  shop_id     INTEGER,
+  token       TEXT NOT NULL,
+  platform    TEXT DEFAULT 'android',
+  active      INTEGER DEFAULT 1,
+  created_at  TEXT NOT NULL,
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_push_token ON push_tokens(token);
+
 CREATE TABLE IF NOT EXISTS reminders (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   shop_id       INTEGER NOT NULL,

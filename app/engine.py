@@ -20,7 +20,7 @@ import random
 import re
 from datetime import datetime, timedelta
 
-from . import db, providers
+from . import db, geo, providers
 
 FMT = "%Y-%m-%d %H:%M:%S"
 DFMT = "%Y-%m-%d"
@@ -55,6 +55,14 @@ DEFAULT_TEMPLATES = [
     ("birthday", "whatsapp",
      "Happy birthday {first_name}! 🎂🎉 Everyone at {shop_name} wishes you a great day. "
      "Here's {discount_text} on us — code {coupon_code}, valid 7 days."),
+    ("proximity", "whatsapp",
+     "Hi {first_name} 👋 You're {distance_text} {shop_name} and your {product} should be "
+     "running low. {offer_line} Reply YES and we'll keep it at the counter for you."),
+    ("proximity_push", "push",
+     "{product} is nearly out — you're {distance_text} {shop_name}. {offer_line}"),
+    ("replenish_smart", "whatsapp",
+     "Hi {first_name} — based on how often you buy {product}, it should run out around "
+     "{depletes_on}. {best_time_line}Want us to set aside {suggest_qty} {unit}?{coupon_line}"),
     ("thank_you", "whatsapp",
      "Thank you for your purchase today, {first_name}! 🧾 {item_summary}. Total {total_text}. "
      "We'll let you know when it's time to restock."),
@@ -259,6 +267,9 @@ def build_context(shop: dict, customer: dict, item: dict | None = None,
         "reward_text": "a free item",
         "headline": (extra or {}).get("headline", "a quick update"),
         "body_extra": (extra or {}).get("body", ""),
+        "distance_text": "",
+        "offer_line": "",
+        "best_time_line": "",
         "coupon_line": "",
         "coupon_code": "",
         "coupon": "",
@@ -491,6 +502,38 @@ def _dispatch(shop: dict, c: dict, r: dict, stats: dict) -> None:
     })
     db.update("reminders", r["id"], {"status": "queued", "message_id": mid, "channel": r["channel"]})
     stats["dispatched"] += 1
+
+
+def queue_nudge_message(shop: dict, decision: dict) -> int | None:
+    """Turn an approved nudge decision into a queued WhatsApp/push message.
+
+    Kept separate from `_dispatch` because the input is a model decision rather
+    than a scheduled reminder row, and the copy is location-aware.
+    """
+    customer = db.q1("SELECT * FROM customers WHERE id=?", (decision.get("customer_id"),))
+    if not customer:
+        return None
+    channel = "whatsapp"
+    distance = float(decision.get("distance_m") or 0)
+    extra = {
+        "distance_text": geo.describe_distance(distance) if distance else "",
+        "offer_line": (f"{decision['discount_pct']:.0f}% off if you come in the next 45 minutes."
+                       if decision.get("discount_pct") else ""),
+        "headline": "Nearby right now",
+    }
+    key = "proximity" if distance else "replenish_smart"
+    subject, body = render(shop["id"], key, channel, build_context(shop, customer, None, None, None, extra))
+    msg_id = db.insert("messages", {
+        "shop_id": shop["id"], "customer_id": customer["id"], "reminder_id": None,
+        "campaign_id": None, "direction": "out", "channel": channel, "provider": "sandbox",
+        "to_addr": customer.get("whatsapp") or customer.get("phone") or "",
+        "from_addr": shop.get("whatsapp_number") or "", "subject": subject, "body": body,
+        "template_key": key, "status": "queued", "provider_msg_id": "", "error": "",
+        "cost": 0.0, "intent": "", "created_at": db.now_iso(),
+    })
+    db.audit("nudges", "nudge.queued", shop["id"], "message", msg_id,
+             f"score={decision.get('score')} {decision.get('reason', '')[:120]}")
+    return msg_id
 
 
 def _deliver_queued(stats: dict, limit: int) -> None:
