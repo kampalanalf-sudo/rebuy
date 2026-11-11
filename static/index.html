@@ -300,7 +300,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal()
 
 /* ===================================================================== state */
 const S = {
-  user: null, shop: null, route: "", days: 30, cache: {},
+  user: null, shop: null, route: "", days: 30, cache: {}, query: "",
   tpl: [], sectors: [], cycles: {}, notice: null,
 };
 const PLAN_NAMES = {starter: "Starter", growth: "Growth", scale: "Scale"};
@@ -406,7 +406,10 @@ async function boot() {
     const e = ev.reason || {};
     if (e && e.status) { toast(e.message || "Request failed", "bad"); ev.preventDefault(); }
   });
-  const path = (location.hash || "#/dashboard").slice(1) || "/dashboard";
+  const hash = (location.hash || "#/dashboard").slice(1) || "/dashboard";
+  // "?error=..." on the hash is data for the page, not part of the route.
+  const path = hash.split("?")[0] || "/dashboard";
+  S.query = hash.split("?")[1] || "";
   S.route = path;
   const isOpenRoute = ["/login", "/signup", "/onboarding", "/admin", "/forgot", "/reset"].includes("/" + path.split("/")[1]);
   try {
@@ -417,7 +420,12 @@ async function boot() {
       if (S.user.role === "admin" && path.split("/")[1] !== "admin") { location.hash = "#/admin"; return; }
     }
   } catch (e) { /* offline: fall through */ }
-  if (!S.user && !isOpenRoute) { location.hash = "#/login"; return; }
+  // Arriving at a protected route while signed out: send them to the login screen,
+  // carrying over any ?error= so the reason survives the bounce.
+  if (!S.user && !isOpenRoute) {
+    location.hash = "#/login" + (S.query ? "?" + S.query : "");
+    return;
+  }
   if (S.user && ["/login", "/signup"].includes(path.split("?")[0])) { location.hash = S.user.role === "admin" ? "#/admin" : "#/dashboard"; return; }
   if (S.user) refreshNotice();
   render(path);
@@ -425,7 +433,7 @@ async function boot() {
 
 function render(path) {
   S.route = path;
-  const parts = path.split("/").filter(Boolean);           // e.g. ["nudges","settings"]
+  const parts = (path.split("?")[0] || "").split("/").filter(Boolean);           // e.g. ["nudges","settings"]
   // exact route first ("/nudges/settings"), then the section ("/nudges"),
   // then the fallback. Sub-pages use the exact match.
   const exact = "/" + parts.join("/");
@@ -452,7 +460,9 @@ function render(path) {
 }
 
 window.addEventListener("hashchange", () => {
-  const path = (location.hash || "#/dashboard").slice(1) || "/dashboard";
+  const hash = (location.hash || "#/dashboard").slice(1) || "/dashboard";
+  S.query = hash.split("?")[1] || "";
+  const path = hash.split("?")[0] || "/dashboard";
   if (!S.user && !["/login", "/signup", "/onboarding", "/admin"].includes("/" + path.split("/")[1])) {
     location.hash = "#/login"; return;
   }
@@ -495,14 +505,21 @@ async function logout() {
 
 /* ===================================================================== AUTH */
 page("/login", {}, async () => {
-  const err = new URLSearchParams(location.hash.split("?")[1] || "").get("error");
+  const err = new URLSearchParams(S.query || location.hash.split("?")[1] || "").get("error");
   const msgs = {
     google_cancelled: "Google sign-in was cancelled.",
+    google_state_lost: "Sign-in could not be completed — the browser dropped the security cookie. Please try again; if it keeps happening, use email and password.",
     state_expired: "That sign-in link expired — please try again.",
     state_mismatch: "Sign-in could not be verified — please try again.",
     google_unverified: "Your Google email is not verified.",
     not_invited: "That email has not been invited to this workspace yet.",
     google_disabled: "Google sign-in is not enabled on this deployment.",
+    google_exchange_failed: "Google could not confirm the sign-in. Please try again.",
+    google_bad_token: "Google's response could not be verified. Please try again.",
+    google_no_email: "Google did not share an email address, so we cannot sign you in.",
+    google_verify_unreachable: "We could not reach Google to verify the sign-in. Please try again.",
+    bad_state: "That sign-in link is no longer valid — please start again.",
+    access_denied: "You declined access on the Google screen, so sign-in was stopped.",
   };
   setTimeout(() => { renderGoogle(); S.flash = null; }, 0);
   return `<div class="authwrap">

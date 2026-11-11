@@ -212,17 +212,25 @@ def google_callback(ctx):
     state = ctx.q("state", "")
     err = ctx.q("error", "")
     if err:
-        return _redirect("/login?error=" + urllib.parse.quote(err), clear_oauth=True)
+        return _redirect("/#/login?error=" + urllib.parse.quote(err), clear_oauth=True)
     cookie = ctx.headers.get("cookie", "")
     m = re.search(r"rebuy_oauth=([^;]+)", cookie)
-    if not code or not m:
-        return _redirect("/login?error=google_cancelled", clear_oauth=True)
+    if not code:
+        # The user pressed Cancel/Deny on Google's screen.
+        return _redirect("/#/login?error=google_cancelled", clear_oauth=True)
+    if not m:
+        # A code arrived but our state cookie did not. That is not a cancellation:
+        # it happens when the browser drops the cookie on the way back (cross-site
+        # privacy modes, a different host than the one that started the flow, or an
+        # expired 10-minute window). Say so, because "cancelled" sends the user
+        # looking for a button they never pressed.
+        return _redirect("/#/login?error=google_state_lost", clear_oauth=True)
     try:
         out = auth.google_exchange(code, auth_redirect_uri(ctx), m.group(1), state)
         user = auth.provision_google_user(out["claims"])
         token = auth.start_session(user, _client_ip(ctx), _ua(ctx), "google")
     except auth.AuthError as e:
-        return _redirect("/login?error=" + urllib.parse.quote(e.code), clear_oauth=True)
+        return _redirect("/#/login?error=" + urllib.parse.quote(e.code), clear_oauth=True)
     db.audit(user["email"], "auth.login.google", user.get("shop_id"))
     nxt = out["next"] if out["next"].startswith("/") else "/dashboard"
     return _redirect("/#" + nxt.lstrip("/"), token=token, clear_oauth=True)

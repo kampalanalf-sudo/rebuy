@@ -197,12 +197,27 @@ def _send_gzip(rel: str, ctype: str) -> tuple[int, dict, bytes] | None:
                  "cache-control": "no-cache" if rel.endswith(".html") else "public, max-age=300"}, data
 
 
+# Client-side routes. The SPA owns these; a deep link must return the app shell
+# rather than a 404, otherwise a redirect to /login lands on a JSON error.
+SPA_ROUTES = {
+    "login", "signup", "onboarding", "forgot", "reset",
+    "dashboard", "inbox", "reminders", "customers", "segments", "loyalty",
+    "sales", "products", "coupons", "reports", "import", "settings", "team",
+    "account", "admin", "nudges",
+}
+
+
 def serve_file(path: str, accept_encoding: str = "") -> tuple[int, dict, bytes] | None:
     rel = path.lstrip("/")
     if rel in ("", "index.html"):
         rel = "index.html"
     if rel == "admin":
         rel = "admin.html"
+    # A path segment the SPA routes on (with or without a deeper tail) is served
+    # the shell. Checked before the file lookup, which would otherwise miss.
+    head = rel.split("/")[0]
+    if head in SPA_ROUTES and not os.path.splitext(rel)[1]:
+        rel = "index.html"
     ext0 = os.path.splitext(rel)[1].lower()
     if ext0 in (".html", ".css", ".js") and "gzip" in (accept_encoding or ""):
         ctype0 = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
