@@ -254,9 +254,17 @@ def google_callback(ctx):
         _trace_call("crash", f"{type(e).__name__}: {str(e)[:250]}")
         raise
     nxt = out["next"] if out["next"].startswith("/") else "/dashboard"
+    # Admin accounts are purely administrative: the platform cockpit is their
+    # home, not a shop dashboard. Send them straight there instead of letting
+    # the shell bounce through #/admin.
+    if user.get("role") == "admin":
+        nxt = "/admin"
     _trace_call("success", f"user={user['email']} role={user.get('role')} "
                            f"cookie_set=yes next={nxt}")
     db.audit(user["email"], "auth.login.google", user.get("shop_id"))
+    # /admin is a real document; everything else is a hash route in the shell.
+    if nxt == "/admin":
+        return _redirect("/admin", token=token)
     return _redirect("/#" + nxt.lstrip("/"), token=token)
 
 
