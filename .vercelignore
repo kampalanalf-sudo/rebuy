@@ -1,0 +1,7 @@
+data/
+scripts/
+deploy.sh
+*.db
+*.db-wal
+*.db-shm
+__pycache__/

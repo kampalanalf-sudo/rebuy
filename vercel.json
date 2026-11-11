@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "45mb"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/cron/tick",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.py?__path=$1"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/tick",
+      "schedule": "*/5 * * * *"
+    }
+  ],
+  "env": {
+    "REBUY_WORKER": "0",
+    "REBUY_TICK_SECONDS": "20"
+  }
+}

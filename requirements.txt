@@ -1,0 +1,5 @@
+# Rebuy runs on the Python standard library alone (http.server, sqlite3, smtplib,
+# urllib, xml.etree). openpyxl is optional: it is only used to read .xlsx imports,
+# and there is a built-in fallback reader when it is missing.
+openpyxl>=3.1.2
+psycopg2-binary>=2.9.9 ; python_version >= "3.8"

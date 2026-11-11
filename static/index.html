@@ -1,0 +1,1993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rebuy — bring your customers back</title>
+<style>
+  :root{
+    --brand:#5b3df5; --brand-dark:#3f28c4; --brand-50:#f2efff; --ink:#14131a; --muted:#6b6a7b;
+    --line:#e6e4ef; --bg:#f7f7fb; --card:#ffffff; --ok:#0d9f6e; --ok-bg:#e6f7f0; --warn:#b7791f;
+    --warn-bg:#fdf6e3; --bad:#d64545; --bad-bg:#fdecec; --info:#2563eb; --info-bg:#e8efff;
+    --radius:14px; --shadow:0 1px 2px rgba(20,19,26,.06),0 8px 24px rgba(20,19,26,.06);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Ubuntu,sans-serif;color:var(--ink);
+       background:var(--bg);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  a{color:var(--brand);text-decoration:none}
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{cursor:pointer}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#d8d5e6;border-radius:8px}
+
+  /* ---------- shell ---------- */
+  #shell{display:flex;min-height:100vh}
+  aside{width:232px;flex:0 0 232px;background:#15132a;color:#cfcce6;display:flex;flex-direction:column;
+        position:sticky;top:0;height:100vh}
+  .logo{display:flex;align-items:center;gap:10px;padding:18px 18px 14px;color:#fff;font-weight:800;font-size:18px;letter-spacing:-.3px}
+  .logo .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7c5cff,#4c2ee0);display:grid;place-items:center;font-size:15px}
+  .shopbox{margin:0 12px 12px;padding:10px 12px;border-radius:11px;background:#211e3d;border:1px solid #302c56}
+  .shopbox .nm{color:#fff;font-weight:650;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .shopbox .sub{font-size:11px;color:#9c98bd;display:flex;gap:6px;align-items:center;margin-top:2px}
+  nav{flex:1;padding:4px 8px;overflow:auto}
+  nav .sec{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#7a76a0;padding:14px 12px 6px}
+  .navitem{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;color:#c9c5e2;font-size:13.5px;cursor:pointer;
+           margin-bottom:2px;text-decoration:none}
+  .navitem:hover{background:#211e3d;color:#fff}
+  .navitem.on{background:#2c2751;color:#fff;font-weight:600}
+  .navitem .ic{width:18px;text-align:center;opacity:.9}
+  .navitem .pill{margin-left:auto;background:#5b3df5;color:#fff;font-size:10.5px;padding:1px 7px;border-radius:20px;font-weight:700}
+  .sidefoot{padding:12px;border-top:1px solid #272347;font-size:12px}
+  .sidefoot a{color:#9c98bd;display:flex;gap:8px;align-items:center;padding:6px 4px}
+  .sidefoot a:hover{color:#fff}
+  main{flex:1;min-width:0;display:flex;flex-direction:column}
+  header.top{display:flex;align-items:center;gap:12px;padding:14px 26px;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);
+              border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  header.top h1{font-size:17.5px;margin:0;font-weight:700;letter-spacing:-.2px}
+  header.top .sub{font-size:12.5px;color:var(--muted);margin-top:1px}
+  header.top .grow{flex:1}
+  .content{padding:22px 26px 60px;max-width:1500px;width:100%}
+  @media (max-width:900px){
+    aside{display:none}
+    header.top{padding:12px 14px}
+    .content{padding:14px}
+    .mobile-nav{display:flex !important}
+  }
+  .mobile-nav{display:none;gap:6px;overflow:auto;padding:8px 12px;background:#15132a}
+  .mobile-nav a{color:#cfcce6;font-size:12px;padding:6px 10px;border-radius:8px;white-space:nowrap;background:#211e3d}
+  .mobile-nav a.on{background:#5b3df5;color:#fff}
+
+  /* ---------- primitives ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card .hd{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .card .hd h3{margin:0;font-size:14px;font-weight:700}
+  .card .hd .sub{font-size:12px;color:var(--muted)}
+  .card .hd .grow{flex:1}
+  .card .bd{padding:16px}
+  .grid{display:grid;gap:14px}
+  .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g21{grid-template-columns:2fr 1fr}
+  @media (max-width:1150px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(2,minmax(0,1fr))}.g21,.g2{grid-template-columns:1fr}}
+  @media (max-width:620px){.g4,.g3{grid-template-columns:1fr}}
+  .kpi{padding:15px 16px}
+  .kpi .label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .kpi .value{font-size:25px;font-weight:750;letter-spacing:-.6px;margin-top:6px}
+  .kpi .foot{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .kpi.brand{background:linear-gradient(135deg,#5b3df5,#7c5cff);border:0;color:#fff}
+  .kpi.brand .label,.kpi.brand .foot{color:#ded7ff}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:9px;border:1px solid var(--line);
+       background:#fff;font-weight:600;font-size:13px;transition:.12s;white-space:nowrap}
+  .btn:hover{border-color:#c9c4e0;background:#fbfaff}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.primary:hover{background:var(--brand-dark)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--brand)}
+  .btn.ghost:hover{background:var(--brand-50)}
+  .btn.danger{color:var(--bad);border-color:#f3cccc}
+  .btn.danger:hover{background:var(--bad-bg)}
+  .btn.sm{padding:5px 9px;font-size:12px;border-radius:7px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;align-items:center;gap:9px}
+  .row.wrap{flex-wrap:wrap}
+  .spread{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  label.f{display:block;font-size:12px;font-weight:600;color:#3d3b4d;margin-bottom:5px}
+  .input,select.input,textarea.input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;outline:0}
+  .input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(91,61,245,.12)}
+  textarea.input{min-height:88px;resize:vertical}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .field{margin-bottom:13px}
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:650;
+         background:#f0eff7;color:#4b4960;white-space:nowrap}
+  .badge.ok{background:var(--ok-bg);color:var(--ok)}
+  .badge.warn{background:var(--warn-bg);color:var(--warn)}
+  .badge.bad{background:var(--bad-bg);color:var(--bad)}
+  .badge.info{background:var(--info-bg);color:var(--info)}
+  .badge.brand{background:var(--brand-50);color:var(--brand-dark)}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+  table.t{width:100%;border-collapse:collapse}
+  table.t th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+             font-weight:650;padding:9px 12px;border-bottom:1px solid var(--line);background:#fbfaff;white-space:nowrap}
+  table.t td{padding:11px 12px;border-bottom:1px solid #f0eef7;vertical-align:middle}
+  table.t tr:last-child td{border-bottom:0}
+  table.t tr.click{cursor:pointer}
+  table.t tr.click:hover td{background:#faf9ff}
+  .scrollx{overflow-x:auto}
+  .empty{padding:34px 16px;text-align:center;color:var(--muted)}
+  .empty .big{font-size:26px;margin-bottom:6px}
+  .mono{font-family:var(--mono);font-size:12px}
+  .muted{color:var(--muted)}
+  .tiny{font-size:11.5px}
+  .nowrap{white-space:nowrap}
+  .right{text-align:right}
+  .mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt20{margin-top:20px}.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}
+  .avatar{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:12.5px;font-weight:700;color:#fff;flex:0 0 32px}
+  .bar{height:7px;border-radius:6px;background:#eeecf7;overflow:hidden}
+  .bar > i{display:block;height:100%;border-radius:6px;background:var(--brand)}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{padding:5px 11px;border-radius:20px;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#4b4960}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow:auto}
+  .tab{padding:9px 13px;border-radius:9px 9px 0 0;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+  .tab.on{color:var(--brand);border-bottom-color:var(--brand)}
+  .switch{position:relative;width:40px;height:22px;border-radius:20px;background:#d9d6e8;border:0;transition:.15s;flex:0 0 40px}
+  .switch:after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}
+  .switch.on{background:var(--brand)}
+  .switch.on:after{left:21px}
+
+  /* ---------- modal ---------- */
+  #modals{position:fixed;inset:0;z-index:80;display:none}
+  #modals.open{display:block}
+  .scrim{position:absolute;inset:0;background:rgba(20,19,26,.45)}
+  .modal{position:relative;margin:6vh auto;background:#fff;border-radius:16px;max-width:640px;width:calc(100% - 32px);
+         max-height:86vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.25)}
+  .modal.wide{max-width:900px}
+  .modal header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .modal header h3{margin:0;font-size:15.5px}
+  .modal .body{padding:20px;overflow:auto}
+  .modal footer{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:9px;background:#fbfaff;border-radius:0 0 16px 16px}
+  .x{margin-left:auto;border:0;background:#f2f0fa;width:28px;height:28px;border-radius:8px;font-size:15px;line-height:1}
+
+  /* ---------- toast ---------- */
+  #toasts{position:fixed;right:18px;bottom:18px;z-index:99;display:flex;flex-direction:column;gap:8px;max-width:380px}
+  .toast{background:#1d1b2e;color:#fff;padding:11px 14px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.25);
+         animation:slide .18s ease-out}
+  .toast.ok{background:#0d7a56}.toast.bad{background:#b23b3b}
+  @keyframes slide{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+
+  /* ---------- auth ---------- */
+  .authwrap{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr}
+  @media (max-width:900px){.authwrap{grid-template-columns:1fr}.authside{display:none}}
+  .authside{background:linear-gradient(150deg,#1a1734,#2b2160 55%,#4b2fbf);color:#fff;padding:44px;display:flex;flex-direction:column}
+  .authside h2{font-size:31px;line-height:1.18;letter-spacing:-.9px;margin:26px 0 12px;max-width:440px}
+  .authside p{color:#cfc8f5;max-width:420px;font-size:14.5px}
+  .authside .feat{display:flex;gap:11px;margin-top:16px;font-size:13.5px;color:#e6e1ff;align-items:flex-start}
+  .authside .feat .tick{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.16);display:grid;place-items:center;font-size:11px;flex:0 0 20px}
+  .authmain{display:flex;align-items:center;justify-content:center;padding:34px 24px}
+  .authcard{width:100%;max-width:400px}
+  .authcard h2{margin:0 0 4px;font-size:22px;letter-spacing:-.4px}
+  .demo-creds{margin-top:16px;padding:12px 14px;background:var(--brand-50);border:1px solid #ddd5ff;border-radius:11px;font-size:12.5px}
+  .demo-creds b{display:block;margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--brand-dark)}
+
+  /* ---------- dashboard bits ---------- */
+  .quick{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media (max-width:820px){.quick{grid-template-columns:repeat(2,1fr)}}
+  .quick a{border:1px solid var(--line);border-radius:12px;padding:13px;background:#fff;display:block;color:inherit;transition:.12s}
+  .quick a:hover{border-color:#c9c0ff;box-shadow:0 6px 18px rgba(91,61,245,.12);transform:translateY(-1px)}
+  .quick .ic{width:30px;height:30px;border-radius:9px;background:var(--brand-50);color:var(--brand-dark);display:grid;place-items:center;font-size:15px;margin-bottom:8px}
+  .quick .tt{font-weight:650;font-size:13px}
+  .quick .ss{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .msgfeed{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow:auto;padding-right:4px}
+  .bubble{max-width:86%;padding:9px 12px;border-radius:12px;font-size:12.8px;position:relative;white-space:pre-wrap;word-break:break-word}
+  .bubble.out{background:#eeebff;border-bottom-left-radius:4px;align-self:flex-start}
+  .bubble.in{background:#e8f7f0;border-bottom-right-radius:4px;align-self:flex-end}
+  .bubble .mt{font-size:10px;color:var(--muted);margin-top:4px}
+  .bubble a{word-break:break-all}
+  .dayago{font-size:11px;color:var(--muted);text-align:center;margin:4px 0}
+  .timeline{position:relative;padding-left:18px}
+  .timeline:before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:#eceaf6}
+  .tl{position:relative;padding:0 0 14px}
+  .tl:before{content:"";position:absolute;left:-16px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--brand);border:2px solid #fff;box-shadow:0 0 0 2px #e6e1ff}
+  .tl .tt{font-weight:600;font-size:12.8px}
+  .tl .ss{font-size:11.5px;color:var(--muted)}
+  .statline{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #eeecf7;font-size:13px}
+  .statline:last-child{border-bottom:0}
+  .statline b{font-weight:650}
+  .invoice-total{font-size:22px;font-weight:750;letter-spacing:-.5px}
+  .mini{display:flex;flex-wrap:wrap;gap:6px}
+  .hr{height:1px;background:var(--line);margin:14px 0}
+  .copybox{background:#0f1020;color:#cfd3ff;padding:10px 12px;border-radius:9px;font-family:var(--mono);font-size:11.5px;
+           word-break:break-all;position:relative}
+  details.adv{border:1px solid var(--line);border-radius:11px;padding:0;margin-bottom:12px;background:#fff}
+  details.adv summary{padding:12px 14px;cursor:pointer;font-weight:650;font-size:13px}
+  details.adv[open] summary{border-bottom:1px solid var(--line)}
+  details.adv .inner{padding:14px}
+  .recent-li{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #f3f1fa}
+  .recent-li:last-child{border-bottom:0}
+  .recent-li .grow{flex:1;min-width:0}
+  .recent-li .nm{font-weight:600;font-size:12.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .recent-li .ss{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sr{position:relative}
+  .sr input{padding-left:32px}
+  .sr .ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+  .pager{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  .selbar{display:none;align-items:center;gap:9px;padding:9px 12px;background:var(--brand-50);border:1px solid #ddd5ff;border-radius:10px;margin-bottom:10px;font-size:12.5px}
+  .selbar.on{display:flex}
+  .stat-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .tile{border:1px solid var(--line);border-radius:11px;padding:11px 12px}
+  .tile .v{font-size:19px;font-weight:700;letter-spacing:-.4px}
+  .tile .l{font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modals"><div class="scrim" onclick="closeModal()"></div><div id="modalslot"></div></div>
+<div id="toasts"></div>
+<script>
+"use strict";
+/* ===================================================================== helpers */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const money = (n, cur) => {
+  const c = cur || (S.shop && S.shop.currency) || "UGX";
+  const v = Number(n || 0);
+  const s = Math.abs(v) >= 1000 ? v.toLocaleString("en-US", {maximumFractionDigits: 0}) : v.toLocaleString("en-US", {maximumFractionDigits: 2});
+  return v < 0 ? "-" + c + " " + s : c + " " + s;
+};
+const num = n => Number(n || 0).toLocaleString("en-US");
+const pct = n => (n == null ? "—" : Number(n).toFixed(1) + "%");
+/* a JS string literal that is safe inside a double-quoted HTML attribute */
+const jsq = s => JSON.stringify(String(s == null ? "" : s)).replace(/"/g, "&quot;");
+const dt = s => {
+  if (!s) return "—";
+  const d = new Date(String(s).replace(" ", "T"));
+  if (isNaN(d)) return String(s).slice(0, 16);
+  const now = new Date();
+  const days = Math.floor((now - d) / 86400000);
+  if (days === 0 && String(s).length > 10) return d.toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days > 0 && days < 7) return days + "d ago";
+  return d.toLocaleDateString("en-GB", {day: "2-digit", month: "short", year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined});
+};
+const datef = s => s ? new Date(String(s).replace(" ", "T")).toLocaleDateString("en-GB", {day: "2-digit", month: "short", year: "numeric"}) : "—";
+const initials = n => (n || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase();
+const AV_COLORS = ["#5b3df5","#0d9f6e","#e0782f","#2563eb","#c2418b","#b7791f","#0e7490","#7c3aed"];
+const avColor = s => AV_COLORS[Math.abs(String(s || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % AV_COLORS.length];
+const avatar = (n, size) => `<div class="avatar" style="background:${avColor(n)};${size ? `width:${size}px;height:${size}px;flex:0 0 ${size}px;font-size:${size * .38}px` : ""}">${esc(initials(n))}</div>`;
+const RISK = {new: ["new", ""], healthy: ["healthy", "ok"], due: ["due soon", "info"], overdue: ["overdue", "warn"],
+              at_risk: ["at risk", "bad"], lost: ["lost", "bad"]};
+const riskBadge = b => { const [l, c] = RISK[b] || [b || "—", ""]; return `<span class="badge ${c}"><span class="dot"></span>${l}</span>`; };
+const CHAN_ICON = {whatsapp: "🟢", sms: "📱", email: "✉️"};
+const STATUS_BADGE = {scheduled: "", sent: "info", delivered: "ok", replied: "brand", converted: "ok", failed: "bad",
+                      cancelled: "", skipped: "", superseded: "", queued: "warn", pending: "", opened: "info", bounced: "bad"};
+
+function toast(msg, kind) {
+  const el = document.createElement("div");
+  el.className = "toast " + (kind || "");
+  el.textContent = msg;
+  $("#toasts").appendChild(el);
+  setTimeout(() => el.remove(), kind === "bad" ? 5200 : 3200);
+}
+
+async function api(path, opts) {
+  opts = opts || {};
+  const init = {method: opts.method || "GET", headers: {"accept": "application/json"}, credentials: "same-origin"};
+  if (opts.body !== undefined) { init.headers["content-type"] = "application/json"; init.body = JSON.stringify(opts.body); }
+  const r = await fetch(path, init);
+  let data = null;
+  const text = await r.text();
+  try { data = text ? JSON.parse(text) : {}; } catch (e) { data = {error: text.slice(0, 300)}; }
+  if (!r.ok) {
+    const err = new Error((data && (data.message || data.error)) || ("HTTP " + r.status));
+    err.status = r.status; err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+function openModal(title, bodyHtml, footerHtml, wide) {
+  $("#modalslot").innerHTML = `<div class="modal ${wide ? "wide" : ""}"><header><h3>${esc(title)}</h3>
+    <button class="x" onclick="closeModal()">✕</button></header>
+    <div class="body">${bodyHtml}</div>${footerHtml ? `<footer>${footerHtml}</footer>` : ""}</div>`;
+  $("#modals").classList.add("open");
+}
+function closeModal() { $("#modals").classList.remove("open"); $("#modalslot").innerHTML = ""; }
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+/* ===================================================================== state */
+const S = {
+  user: null, shop: null, route: "", days: 30, cache: {},
+  tpl: [], sectors: [], cycles: {}, notice: null,
+};
+const PLAN_NAMES = {starter: "Starter", growth: "Growth", scale: "Scale"};
+
+const NAV = [
+  {sec: "Workspace"},
+  {r: "/dashboard", label: "Dashboard", ic: "◎"},
+  {r: "/inbox", label: "Inbox", ic: "✉", badgeKey: "unread"},
+  {r: "/reminders", label: "Reminders", ic: "⏰", badgeKey: "due_reminders"},
+  {sec: "Customers"},
+  {r: "/customers", label: "Customers", ic: "☺"},
+  {r: "/segments", label: "Segments", ic: "◫"},
+  {r: "/loyalty", label: "Loyalty", ic: "★"},
+  {sec: "Revenue"},
+  {r: "/sales", label: "Sales", ic: "▤"},
+  {r: "/products", label: "Products & services", ic: "▦"},
+  {r: "/coupons", label: "Coupons", ic: "✁"},
+  {r: "/reports", label: "Reports", ic: "◔"},
+  {sec: "Setup"},
+  {r: "/import", label: "Import data", ic: "⇪"},
+  {r: "/settings", label: "Settings", ic: "⚙"},
+];
+
+function shell(inner) {
+  const shop = S.shop || {};
+  const which = "/" + (S.route.split("/")[1] || "dashboard");
+  const secs = [];
+  let cur = [];
+  for (const n of NAV) {
+    if (n.sec) { if (cur.length) secs.push(cur); cur = [n]; } else cur.push(n);
+  }
+  if (cur.length) secs.push(cur);
+  let navHtml = "";
+  for (const group of secs) {
+    const head = group[0].sec;
+    if (head) navHtml += `<div class="sec">${esc(head)}</div>`;
+    for (const n of group.slice(head ? 1 : 0)) {
+      const badge = n.badgeKey && S.notice && S.notice[n.badgeKey] ? `<span class="pill">${S.notice[n.badgeKey]}</span>` : "";
+      const on = n.r === which || (which === "/onboarding" && n.r === "/dashboard");
+      navHtml += `<a class="navitem ${on ? "on" : ""}" href="#${n.r}"><span class="ic">${n.ic}</span>${esc(n.label)}${badge}</a>`;
+    }
+  }
+  const mobile = `<div class="mobile-nav">${NAV.filter(n => n.r).map(n => `<a href="#${n.r}" class="${n.r === which ? "on" : ""}">${esc(n.label)}</a>`).join("")}</div>`;
+  return `<div id="shell">
+    <aside>
+      <div class="logo"><span class="mark">↻</span> Rebuy</div>
+      <div class="shopbox">
+        <div class="nm">${esc(shop.name || "Your shop")}</div>
+        <div class="sub">${esc(PLAN_NAMES[shop.plan] || shop.plan || "")} plan · <span class="badge ${shop.status === "active" ? "ok" : "warn"}" style="padding:0 6px">${esc(shop.status || "")}</span></div>
+      </div>
+      <nav>${navHtml}</nav>
+      <div class="sidefoot">
+        <a href="javascript:void 0" onclick="showHelp()">? Help & how it works</a>
+        <a href="javascript:void 0" onclick="logout()">⏻ Sign out</a>
+      </div>
+    </aside>
+    <main>
+      ${mobile}
+      <header class="top">
+        <div><h1 id="pageTitle"></h1><div class="sub" id="pageSub"></div></div>
+        <div class="grow"></div>
+        <div class="row" style="gap:8px">
+          <button class="btn sm" onclick="runTick(true)" title="Process any reminders that are due right now">⚡ Run now</button>
+          <a class="btn primary sm" href="#/sales/new">+ New sale</a>
+        </div>
+      </header>
+      <div class="content" id="view">${inner}</div>
+    </main>
+  </div>`;
+}
+
+const PAGES = {
+  "/dashboard": ["Dashboard", "Your shop at a glance — revenue, outreach and customer health."],
+  "/inbox": ["Inbox", "Every customer reply in one place."],
+  "/reminders": ["Reminder queue", "What Rebuy is about to send, and what it already sent."],
+  "/customers": ["Customers", "Everyone who has bought from you, with their restock health."],
+  "/segments": ["Segments & campaigns", "Group customers and message them in bulk."],
+  "/loyalty": ["Loyalty", "Reward the customers who keep coming back."],
+  "/sales": ["Sales", "Every sale, and the restock clock it started."],
+  "/products": ["Products & services", "What you sell and how long it lasts."],
+  "/coupons": ["Coupons", "Discount codes — automatic and manual."],
+  "/reports": ["Reports", "Does retention actually work? The numbers."],
+  "/import": ["Import data", "Spreadsheets, receipts and sales books."],
+  "/settings": ["Settings", "Shop profile, reminder rules, channels and templates."],
+  "/onboarding": ["Getting started", "Six steps to a self-running retention engine."],
+};
+function setPage(title, sub) {
+  const t = $("#pageTitle"), s = $("#pageSub");
+  if (t) t.textContent = title;
+  if (s) s.textContent = sub || "";
+}
+
+/* ===================================================================== router */
+const ROUTES = {};
+function page(path, opts, render) { ROUTES[path] = Object.assign({render}, opts || {}); }
+
+async function boot() {
+  // top-level error surface
+  window.addEventListener("unhandledrejection", ev => {
+    const e = ev.reason || {};
+    if (e && e.status) { toast(e.message || "Request failed", "bad"); ev.preventDefault(); }
+  });
+  const path = (location.hash || "#/dashboard").slice(1) || "/dashboard";
+  S.route = path;
+  const isOpenRoute = ["/login", "/signup", "/onboarding", "/admin"].includes("/" + path.split("/")[1]);
+  try {
+    const me = await api("/api/auth/me");
+    if (me.authenticated) {
+      S.user = me.user; S.shop = me.shop;
+      if (S.user.role === "admin" && path.split("/")[1] !== "admin") { location.hash = "#/admin"; return; }
+    }
+  } catch (e) { /* offline: fall through */ }
+  if (!S.user && !isOpenRoute) { location.hash = "#/login"; return; }
+  if (S.user && ["/login", "/signup"].includes(path)) { location.hash = S.user.role === "admin" ? "#/admin" : "#/dashboard"; return; }
+  if (S.user) refreshNotice();
+  render(path);
+}
+
+function render(path) {
+  S.route = path;
+  const parts = path.split("/").filter(Boolean);           // e.g. ["customers","12"]
+  const key = "/" + (parts[0] || "dashboard");
+  const spec = ROUTES[key] || ROUTES["/dashboard"];
+  const ctx = {parts, rest: parts.slice(1), path};
+  const app = $("#app");
+  try {
+    const out = spec.render(ctx);
+    if (out && typeof out.then === "function") {
+      app.innerHTML = `<div style="padding:60px;text-align:center;color:var(--muted)">Loading…</div>`;
+      out.then(html => { app.innerHTML = html; if (spec.mount) spec.mount(ctx); })
+         .catch(err => { app.innerHTML = shell(`<div class="card"><div class="bd"><b>Could not load this page.</b><div class="muted mt8">${esc(err.message || err)}</div></div></div>`); });
+    } else {
+      app.innerHTML = out;
+      if (spec.mount) spec.mount(ctx);
+    }
+  } catch (err) {
+    app.innerHTML = `<div class="card"><div class="bd"><b>Page error</b><div class="muted mt8">${esc(err.message || err)}</div></div></div>`;
+  }
+  const meta = PAGES["/" + (parts[0] || "dashboard")];
+  if (meta) setPage(meta[0], meta[1]);
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener("hashchange", () => {
+  const path = (location.hash || "#/dashboard").slice(1) || "/dashboard";
+  if (!S.user && !["/login", "/signup", "/onboarding", "/admin"].includes("/" + path.split("/")[1])) {
+    location.hash = "#/login"; return;
+  }
+  render(path);
+});
+
+async function refreshNotice() {
+  try {
+    const [shop, dash] = await Promise.all([api("/api/shop"), api("/api/inbox?unread=1")]);
+    S.shop = shop.shop;
+    S.notice = {unread: dash.unread_unread || (dash.unread && dash.unread.length) || 0,
+                due_reminders: shop.counts ? shop.counts.reminders_due : 0};
+    $$(".navitem").forEach(a => {
+      const k = (NAV.find(n => a.getAttribute("href") === "#" + n.r) || {}).badgeKey;
+      if (k) {
+        const v = S.notice[k] || 0;
+        let pill = $(".pill", a);
+        if (v) { if (!pill) { pill = document.createElement("span"); pill.className = "pill"; a.appendChild(pill); } pill.textContent = v; }
+        else if (pill) pill.remove();
+      }
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function runTick(verbose) {
+  try {
+    const r = await api("/api/reminders/run", {method: "POST"});
+    const s2 = r.stats || {};
+    toast(`Queue processed — ${s2.dispatched || 0} messages sent${s2.errors ? ` · ${s2.errors} errors` : ""}`, "ok");
+    if (verbose) setTimeout(() => location.reload(), 700);
+    else refreshNotice();
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+async function logout() {
+  try { await api("/api/auth/logout", {method: "POST"}); } catch (e) {}
+  S.user = null; S.shop = null;
+  location.hash = "#/login";
+}
+
+/* ===================================================================== AUTH */
+page("/login", {}, () => `<div class="authwrap">
+  <div class="authside">
+    <div class="logo" style="padding:0"><span class="mark">↻</span> Rebuy</div>
+    <h2>Your customers buy once. Rebuy brings them back.</h2>
+    <p>Rebuy watches what every customer bought, knows when it runs out, and messages them on WhatsApp at exactly the right moment — automatically.</p>
+    <div class="feat"><span class="tick">✓</span><span>Automatic replenishment & service re-booking reminders</span></div>
+    <div class="feat"><span class="tick">✓</span><span>WhatsApp first, with SMS and email fallback</span></div>
+    <div class="feat"><span class="tick">✓</span><span>Upload your sales book or receipts — we do the sorting</span></div>
+    <div class="feat"><span class="tick">✓</span><span>Win-back campaigns, coupons and loyalty built in</span></div>
+    <div style="margin-top:auto;font-size:12px;color:#8f87c9;padding-top:26px">Built for Ugandan shops · UGX pricing · works from your phone</div>
+  </div>
+  <div class="authmain"><div class="authcard">
+    <h2>Welcome back</h2>
+    <div class="muted" style="margin-bottom:20px">Sign in to your shop dashboard.</div>
+    <form onsubmit="doLogin(event)">
+      <div class="field"><label class="f">Email</label><input class="input" name="email" type="email" autocomplete="username" required placeholder="owner@yourshop.ug"></div>
+      <div class="field"><label class="f">Password</label><input class="input" name="password" type="password" autocomplete="current-password" required placeholder="••••••••"></div>
+      <button class="btn primary" style="width:100%;justify-content:center;padding:11px" type="submit">Sign in</button>
+    </form>
+    <div class="tiny mt12" style="text-align:center">New to Rebuy? <a href="#/signup">Create your shop account</a></div>
+    <div class="demo-creds">
+      <b>Demo shops</b>
+      <div class="row" style="justify-content:space-between"><span>Kampala Fresh Mart (Supermarket)</span><span class="mono">owner@kampalafresh.ug</span></div>
+      <div class="row" style="justify-content:space-between"><span>Nakato Hair Lounge (Salon)</span><span class="mono">owner@nakatohair.ug</span></div>
+      <div class="row" style="justify-content:space-between"><span>Platform admin</span><span class="mono">admin@rebuy.app</span></div>
+      <div class="tiny mt8">Password for all three: <span class="mono">Shop1234!</span> / <span class="mono">Admin1234!</span> for admin · <a href="#/admin">admin login</a></div>
+    </div>
+  </div></div>
+</div>`);
+
+async function doLogin(ev) {
+  ev.preventDefault();
+  const f = ev.target;
+  const btn = $("button[type=submit]", f);
+  btn.disabled = true; btn.textContent = "Signing in…";
+  try {
+    const r = await api("/api/auth/login", {method: "POST", body: {email: f.email.value.trim(), password: f.password.value}});
+    S.user = r.user; S.shop = r.shop;
+    if (r.user.role === "admin") location.hash = "#/admin";
+    else location.hash = r.shop && !r.shop.onboarded_at ? "#/onboarding" : "#/dashboard";
+  } catch (e) {
+    toast(e.message || "Could not sign in", "bad");
+    btn.disabled = false; btn.textContent = "Sign in";
+  }
+}
+
+page("/signup", {}, () => `<div class="authwrap">
+  <div class="authside">
+    <div class="logo" style="padding:0"><span class="mark">↻</span> Rebuy</div>
+    <h2>Set up your shop in 3 minutes.</h2>
+    <p>No card needed. Start on a 14-day trial, import your sales book, and Rebuy starts messaging customers for you the same day.</p>
+    <div class="feat"><span class="tick">1</span><span>Create your account &amp; shop profile</span></div>
+    <div class="feat"><span class="tick">2</span><span>Import customers, products or receipts</span></div>
+    <div class="feat"><span class="tick">3</span><span>Connect WhatsApp and switch on auto-reminders</span></div>
+  </div>
+  <div class="authmain"><div class="authcard">
+    <h2>Create your shop</h2>
+    <div class="muted" style="margin-bottom:20px">Takes about a minute. You can edit everything later.</div>
+    <form onsubmit="doSignup(event)">
+      <div class="field"><label class="f">Shop name</label><input class="input" name="shop_name" required placeholder="e.g. Mama Jane's Grocery"></div>
+      <div class="g2" style="gap:10px">
+        <div class="field"><label class="f">Your name</label><input class="input" name="owner_name" placeholder="Jane Nakato"></div>
+        <div class="field"><label class="f">Phone (WhatsApp)</label><input class="input" name="phone" placeholder="+256 7.. ..."></div>
+      </div>
+      <div class="g2" style="gap:10px">
+        <div class="field"><label class="f">Business type</label><select class="input" name="sector">${["Supermarket","Grocery & Duka","LPG & Water","Salon & Spa","Pharmacy","Auto Garage","Bakery","Hardware","Agrovet","Boutique","Laundry","Gym & Fitness","Electronics","Pet Shop","Restaurant","Clinic","Stationery","Retail"].map(s => `<option>${s}</option>`).join("")}</select></div>
+        <div class="field"><label class="f">Plan</label><select class="input" name="plan"><option value="starter">Starter — UGX 49,000/mo</option><option value="growth">Growth — UGX 129,000/mo</option><option value="scale">Scale — UGX 299,000/mo</option></select></div>
+      </div>
+      <div class="field"><label class="f">Email</label><input class="input" name="email" type="email" required placeholder="you@shop.ug"></div>
+      <div class="field"><label class="f">Password</label><input class="input" name="password" type="password" minlength="8" required placeholder="at least 8 characters"><div class="hint">Use at least 8 characters.</div></div>
+      <button class="btn primary" style="width:100%;justify-content:center;padding:11px" type="submit">Create my shop →</button>
+    </form>
+    <div class="tiny mt12" style="text-align:center">Already have an account? <a href="#/login">Sign in</a></div>
+  </div></div>
+</div>`);
+
+async function doSignup(ev) {
+  ev.preventDefault();
+  const f = ev.target;
+  const btn = $("button[type=submit]", f);
+  btn.disabled = true; btn.textContent = "Creating…";
+  try {
+    const body = {};
+    for (const el of f.elements) if (el.name) body[el.name] = el.value;
+    const r = await api("/api/signup", {method: "POST", body});
+    S.user = r.user; S.shop = r.shop;
+    toast("Shop created — let's get you set up", "ok");
+    location.hash = "#/onboarding";
+  } catch (e) { toast(e.message || "Could not create the shop", "bad"); btn.disabled = false; btn.textContent = "Create my shop →"; }
+}
+
+page("/onboarding", {}, async () => {
+  const d = await api("/api/dashboard");
+  const steps = d.onboarding || [];
+  const done = steps.filter(s => s.done).length;
+  const pctDone = Math.round(100 * done / Math.max(1, steps.length));
+  const ic = {add_products: "▦", add_customers: "☺", record_sale: "▤", connect_channel: "⚡", first_reminder: "✉", loyalty: "★"};
+  return shell(`<div class="grid g21">
+    <div>
+      <div class="card"><div class="bd">
+        <div class="spread"><div><h2 style="margin:0;font-size:20px;letter-spacing:-.4px">Welcome to Rebuy, ${esc(S.shop ? S.shop.name : "")} 👋</h2>
+          <div class="muted mt8">Six short steps and your shop runs retention on autopilot.</div></div>
+          <div style="text-align:right"><div style="font-size:26px;font-weight:750;letter-spacing:-.6px">${pctDone}%</div><div class="tiny muted">set up</div></div></div>
+        <div class="bar mt12"><i style="width:${pctDone}%"></i></div>
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>Your setup checklist</h3><div class="grow"></div><span class="badge">${done}/${steps.length} done</span></div>
+        <div class="bd" style="padding:6px 16px">
+          ${steps.map((s, i) => `<div class="recent-li" style="padding:13px 0">
+            <div class="avatar" style="background:${s.done ? "#0d9f6e" : "#e9e6f7"};color:${s.done ? "#fff" : "#6b6890"};border-radius:9px">${s.done ? "✓" : (i + 1)}</div>
+            <div class="grow"><div class="nm">${esc(s.label)}</div><div class="ss">${s.done ? "Done — nice work." : "Not set up yet"}</div></div>
+            ${s.done ? `<span class="badge ok">Done</span>` : `<button class="btn sm primary" onclick="onboardGo('${s.key}')">Do it →</button>`}
+          </div>`).join("")}
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card"><div class="hd"><h3>Fastest way to start</h3></div><div class="bd">
+        <div class="tiny muted">Got a sales book, an Excel export or a pile of receipts? Drop them in and Rebuy rebuilds your customer list, purchase history and reminder schedule automatically.</div>
+        <a class="btn primary mt12" style="width:100%;justify-content:center" href="#/import">⇪ Import sales data</a>
+        <a class="btn mt8" style="width:100%;justify-content:center" href="#/sales/new">Record a sale manually</a>
+        <a class="btn mt8" style="width:100%;justify-content:center" href="#/products">Add products & services</a>
+        <div class="hr"></div>
+        <div class="tiny muted">Messages go out over WhatsApp by default. You can add SMS and email any time in Settings → Channels.</div>
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>How Rebuy works</h3></div><div class="bd">
+        <div class="timeline">
+          <div class="tl"><div class="tt">1. Every sale is recorded</div><div class="ss">Customer, items, quantities, date.</div></div>
+          <div class="tl"><div class="tt">2. We learn the cycle</div><div class="ss">A 2kg rice bag lasts ~21 days. A haircut ~28. A service ~90.</div></div>
+          <div class="tl"><div class="tt">3. The reminder fires on time</div><div class="ss">WhatsApp message with a one-tap reply to reorder.</div></div>
+          <div class="tl"><div class="tt">4. You see the money</div><div class="ss">Replies, conversions and recovered revenue on the dashboard.</div></div>
+        </div>
+      </div></div>
+    </div>
+  </div>`);
+});
+
+function onboardGo(key) {
+  const map = {add_products: "#/products", add_customers: "#/customers", record_sale: "#/sales/new",
+               connect_channel: "#/settings", first_reminder: "#/reminders", loyalty: "#/settings"};
+  location.hash = map[key] || "#/dashboard";
+}
+
+/* ===================================================================== DASHBOARD */
+page("/dashboard", {}, async () => {
+  const d = await api("/api/dashboard?days=" + S.days);
+  CHART_DATA = {sales: d.revenue_series || [], msgs: d.message_series || []};
+  const k = d.kpis, shop = d.shop;
+  const duePct = k.customers ? Math.round(100 * (k.due_today || 0) / k.customers) : 0;
+  const riskTotal = (d.risk_mix || []).reduce((a, r) => a + r.n, 0) || 1;
+  const riskColors = {healthy: "#0d9f6e", new: "#5b3df5", due: "#2563eb", overdue: "#b7791f", at_risk: "#d64545", lost: "#8b4560"};
+  return shell(`
+  <div class="grid g4">
+    <div class="card kpi brand"><div class="label">Revenue recovered</div><div class="value">${money(k.revenue_recovered)}</div>
+      <div class="foot">${num(k.conversions)} conversions · last ${S.days} days</div></div>
+    <div class="card kpi"><div class="label">Reminders due today</div><div class="value">${num(k.due_today)}</div>
+      <div class="foot"><a href="#/reminders">Open the queue →</a></div></div>
+    <div class="card kpi"><div class="label">Reply rate</div><div class="value">${pct(k.reply_rate)}</div>
+      <div class="foot">${num(k.replies)} replies from ${num(k.reminders_sent)} reminders</div></div>
+    <div class="card kpi"><div class="label">Retention score</div><div class="value">${pct(k.retention_score)}</div>
+      <div class="foot">${num(k.active_customers)} repeat customers of ${num(k.customers)}</div></div>
+  </div>
+
+  <div class="grid g21 mt16">
+    <div class="card"><div class="hd"><h3>Revenue &amp; outreach</h3><div class="grow"></div>
+      <div class="chips">${[7, 30, 90].map(x => `<span class="chip ${S.days === x ? "on" : ""}" onclick="S.days=${x};render('/dashboard')">${x}d</span>`).join("")}</div></div>
+      <div class="bd"><div id="chart1"></div></div></div>
+
+    <div class="card"><div class="hd"><h3>Customer health</h3></div><div class="bd">
+      <div class="row" style="gap:14px;align-items:center">
+        ${donut((d.risk_mix || []).map(r => ({label: RISK[r.band] ? RISK[r.band][0] : r.band, n: r.n, color: riskColors[r.band] || "#999"})))}
+        <div style="flex:1">
+          ${(d.risk_mix || []).sort((a, b) => b.n - a.n).map(r => `<div class="statline"><span class="row" style="gap:7px"><span class="dot" style="color:${riskColors[r.band] || "#999"}"></span>${esc(RISK[r.band] ? RISK[r.band][0] : r.band)}</span><b>${num(r.n)} <span class="tiny muted">${Math.round(100 * r.n / riskTotal)}%</span></b></div>`).join("") || `<div class="empty">No customers yet</div>`}
+        </div>
+      </div>
+      <div class="hr"></div>
+      <div class="statline"><span class="muted">Customers at risk</span><b>${num(k.at_risk)}</b></div>
+      <div class="statline"><span class="muted">Revenue at risk</span><b>${money(k.revenue_at_risk)}</b></div>
+      <div class="statline"><span class="muted">Loyalty points outstanding</span><b>${num(k.loyalty_points_outstanding)}</b></div>
+    </div></div>
+  </div>
+
+  <div class="mt16"><div class="quick">
+    <a href="#/sales/new"><div class="ic">＋</div><div class="tt">Record a sale</div><div class="ss">Picks up the restock cycle</div></a>
+    <a href="#/import"><div class="ic">⇪</div><div class="tt">Import sales book</div><div class="ss">CSV, Excel, receipt photo</div></a>
+    <a href="#/segments"><div class="ic">◫</div><div class="tt">Message a segment</div><div class="ss">Win back lapsed buyers</div></a>
+    <a href="#/settings"><div class="ic">⚡</div><div class="tt">Connect WhatsApp</div><div class="ss">${shop.whatsapp_number ? "Connected · " + esc(shop.whatsapp_number) : "Sandbox mode — 2 min setup"}</div></a>
+  </div></div>
+
+  <div class="grid g21 mt16">
+    <div class="card"><div class="hd"><h3>Upcoming reminders</h3><div class="grow"></div><a class="btn sm" href="#/reminders">See all</a></div>
+      <div class="scrollx">${table([
+        ["When", r => `<b>${dt(r.due_on)}</b>`],
+        ["Customer", r => `<div class="row" style="gap:8px">${avatar(r.customer, 26)}<div><div style="font-weight:600">${esc(r.customer)}</div><div class="tiny muted">${esc(r.phone || "")}</div></div></div>`],
+        ["Reason", r => `${esc(r.product_name || r.kind)} ${riskBadge(r.risk_band)}`],
+        ["Channel", r => `<span class="badge">${CHAN_ICON[r.channel] || ""} ${esc(r.channel)}</span>`],
+      ], d.upcoming, r => `location.hash='#/reminders'`, "No reminders scheduled yet")}</div>
+    </div>
+    <div class="card"><div class="hd"><h3>Needs your attention</h3><div class="grow"></div><a class="btn sm" href="#/inbox">Inbox</a></div>
+      <div class="bd" style="padding:8px 16px">
+        ${(d.needs_action || []).length ? d.needs_action.map(r => `<div class="recent-li">
+          <div class="avatar" style="background:${avColor(r.customer)}">${esc(initials(r.customer))}</div>
+          <div class="grow"><div class="nm">${esc(r.customer)} <span class="badge ${r.intent === "opt_out" ? "bad" : "brand"}">${esc(r.intent || r.status)}</span></div>
+          <div class="ss">${esc(r.last_reply || r.product_name || "")}</div></div>
+          <a class="btn sm" href="#/inbox">Open</a></div>`).join("") : `<div class="empty"><div class="big">✓</div>Nothing waiting on you</div>`}
+      </div></div>
+  </div>
+
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>Top products by revenue</h3><div class="tiny muted">last 90 days</div></div>
+      <div class="scrollx">${table([
+        ["Product", r => `<b>${esc(r.name)}</b>`],
+        ["Sold", r => num(r.purchases)],
+        ["Revenue", r => money(r.revenue)],
+        ["Cycle", r => `<span class="badge">${r.cycle ? Math.round(r.cycle) + " days" : "—"}</span>`],
+      ], d.top_products, null, "No sales recorded yet")}</div></div>
+    <div class="card"><div class="hd"><h3>At-risk customers</h3><div class="grow"></div><a class="btn sm" href="#/segments">Win back</a></div>
+      <div class="bd" style="padding:8px 16px">
+        ${(d.at_risk || []).length ? d.at_risk.map(c => `<div class="recent-li">
+          <div class="avatar" style="background:${avColor(c.name)}">${esc(initials(c.name))}</div>
+          <div class="grow"><div class="nm">${esc(c.name)} ${riskBadge(c.risk_band)}</div>
+          <div class="ss">${num(c.visit_count)} visits · ${money(c.total_spent)} · last ${dt(c.last_purchase_at)}</div></div>
+          <a class="btn sm" href="#/customers/${c.id}">View</a></div>`).join("") : `<div class="empty">No at-risk customers — nice.</div>`}
+      </div></div>
+  </div>
+
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>Latest activity</h3></div>
+      <div class="bd" style="padding:8px 16px">${(d.recent_sales || []).map(s => `<div class="recent-li">
+        <div class="avatar" style="background:#e9e6f7;color:#5b3df5;border-radius:9px">▤</div>
+        <div class="grow"><div class="nm">${esc(s.customer || "Walk-in")}</div><div class="ss">${esc(s.receipt_no || "")} · ${dt(s.sale_date)} · ${esc(s.source || "")}</div></div>
+        <b>${money(s.total)}</b></div>`).join("") || `<div class="empty">No sales yet</div>`}</div></div>
+    <div class="card"><div class="hd"><h3>Channels (last ${S.days} days)</h3></div><div class="bd">
+      ${(d.channel_mix || []).map(c => `<div style="margin-bottom:12px">
+        <div class="spread"><div>${CHAN_ICON[c.channel] || ""} <b style="text-transform:capitalize">${esc(c.channel)}</b></div><div class="tiny muted">${num(c.n)} sent · ${num(c.failed)} failed</div></div>
+        <div class="bar mt8"><i style="width:${Math.min(100, 100 * c.n / Math.max(1, ...(d.channel_mix || []).map(x => x.n)))}%;background:${c.channel === "whatsapp" ? "#0d9f6e" : c.channel === "sms" ? "#2563eb" : "#b7791f"}"></i></div>
+      </div>`).join("") || `<div class="empty">No messages sent yet</div>`}
+      <div class="hr"></div>
+      <a class="btn" style="width:100%;justify-content:center" href="#/settings">Manage channels &amp; providers</a>
+    </div></div>
+  </div>`);
+}, {mount: () => { setTimeout(drawRevenueChart, 30); }});
+
+let CHART_DATA = null;
+function drawRevenueChart() {
+  const el = $("#chart1");
+  if (!el || !CHART_DATA) return;
+  const {sales, msgs} = CHART_DATA;
+  const w = el.clientWidth || 600, h = 180, pad = 26;
+  const maxS = Math.max(1, ...sales.map(p => p.value));
+  const maxM = Math.max(1, ...msgs.map(p => p.value));
+  const n = Math.max(sales.length, 1);
+  const bw = Math.max(2, (w - pad * 2) / n - 3);
+  const x = i => pad + i * ((w - pad * 2) / n);
+  const yS = v => h - 22 - (h - 34) * (v / maxS);
+  const path = msgs.map((p, i) => `${i ? "L" : "M"}${(x(i) + bw / 2).toFixed(1)},${(h - 22 - (h - 34) * (p.value / maxM)).toFixed(1)}`).join(" ");
+  el.innerHTML = `<svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="overflow:visible">
+    <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b3df5"/><stop offset="1" stop-color="#8f7bff"/></linearGradient></defs>
+    ${sales.map((p, i) => `<rect x="${x(i)}" y="${yS(p.v)}" width="${bw}" height="${Math.max(0, h - 22 - yS(p.v))}" rx="3" fill="url(#g1)" opacity=".92"><title>${p.d}: ${money(p.value)}</title></rect>`).join("")}
+    <path d="${path}" fill="none" stroke="#0d9f6e" stroke-width="2" stroke-linejoin="round"><title>messages</title></path>
+    <line x1="${pad}" x2="${w - pad}" y1="${h - 22}" y2="${h - 22}" stroke="#e6e4ef"/>
+    <text x="${pad}" y="${h - 6}" font-size="10" fill="#6b6a7b">${sales.length ? sales[0].day : ""}</text>
+    <text x="${w - pad}" y="${h - 6}" font-size="10" fill="#6b6a7b" text-anchor="end">${sales.length ? sales[sales.length - 1].day : ""}</text>
+  </svg>
+  <div class="row mt8" style="gap:16px"><span class="tiny muted"><span class="dot" style="color:#5b3df5"></span> Sales (max ${money(maxS)})</span>
+  <span class="tiny muted"><span class="dot" style="color:#0d9f6e"></span> Messages sent (max ${maxM})</span></div>`;
+}
+
+function donut(parts) {
+  const total = parts.reduce((a, p) => a + p.n, 0) || 1;
+  let acc = 0;
+  const segs = parts.map(p => {
+    const frac = p.n / total, start = acc; acc += frac;
+    return {p, start};
+  });
+  const r = 42, c = 50, circ = 2 * Math.PI * r;
+  return `<svg width="112" height="112" viewBox="0 0 100 100"><circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#f0eef7" stroke-width="14"/>
+  ${segs.map(s => `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${s.p.color}" stroke-width="14"
+     stroke-dasharray="${(s.p.n / total * circ).toFixed(2)} ${circ.toFixed(2)}" stroke-dashoffset="${(-s.start * circ).toFixed(2)}"
+     transform="rotate(-90 ${c} ${c})"><title>${esc(s.p.label)}: ${s.p.n}</title></circle>`).join("")}
+  <text x="${c}" y="${c + 1}" text-anchor="middle" font-size="15" font-weight="700" fill="#14131a">${num(total)}</text>
+  <text x="${c}" y="${c + 13}" text-anchor="middle" font-size="7" fill="#6b6a7b">CUSTOMERS</text></svg>`;
+}
+
+function table(cols, rows, onclick, emptyMsg) {
+  if (!rows || !rows.length) return `<div class="empty"><div class="big">◎</div>${esc(emptyMsg || "Nothing here yet")}</div>`;
+  return `<table class="t"><thead><tr>${cols.map(c => `<th>${esc(c[0])}</th>`).join("")}</tr></thead><tbody>
+    ${rows.map(r => `<tr class="${onclick ? "click" : ""}" ${onclick ? `onclick="${onclick(r)}"` : ""}>${cols.map(c => `<td>${c[1](r)}</td>`).join("")}</tr>`).join("")}
+  </tbody></table>`;
+}
+
+/* ===================================================================== INBOX */
+page("/inbox", {}, async (ctx) => {
+  const list = await api("/api/inbox");
+  const convs = list.conversations || [];
+  const activeId = ctx.rest[0] ? Number(ctx.rest[0]) : (convs[0] ? convs[0].customer_id : null);
+  let thread = null;
+  if (activeId) {
+    try { thread = await api("/api/inbox/" + activeId); } catch (e) { thread = null; }
+  }
+  const unread = list.unread || 0;
+  const iv = (window.__iv && clearInterval(window.__iv), window.__iv = setInterval(refreshNotice, 30000));
+  return shell(`<div class="grid" style="grid-template-columns:330px 1fr;gap:14px;align-items:start">
+    <div class="card" style="max-height:74vh;display:flex;flex-direction:column">
+      <div class="hd"><h3>Conversations</h3><div class="grow"></div>${unread ? `<span class="badge bad">${unread} unread</span>` : ""}</div>
+      <div style="overflow:auto;flex:1">
+      ${convs.map(c => `<a href="#/inbox/${c.customer_id}" style="display:flex;gap:9px;padding:11px 14px;border-bottom:1px solid #f3f1fa;color:inherit;${c.customer_id === activeId ? "background:#f7f5ff" : ""}">
+        <div class="avatar" style="background:${avColor(c.name)}">${esc(initials(c.name))}</div>
+        <div style="flex:1;min-width:0">
+          <div class="spread"><div style="font-weight:650;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</div>
+            <div class="tiny muted nowrap">${dt(c.last_at)}</div></div>
+          <div class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.last_direction === "in" ? "↩ " : ""}${esc(c.last_body || "")}</div>
+        </div>
+        ${c.unanswered ? `<span class="badge bad" style="align-self:center">!</span>` : ""}
+      </a>`).join("") || `<div class="empty"><div class="big">✉</div>No conversations yet.<br><span class="tiny">Run the queue or simulate a reply to see the loop.</span></div>`}
+      </div>
+      <div style="padding:10px 12px;border-top:1px solid var(--line)">
+        <button class="btn sm" style="width:100%;justify-content:center" onclick="simulateReply(${activeId || "null"})">🎭 Simulate customer reply</button>
+      </div>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;max-height:74vh">
+      ${thread ? `
+      <div class="hd">${avatar(thread.customer.name)}
+        <div><h3>${esc(thread.customer.name)}</h3><div class="tiny muted">${esc(thread.customer.phone || "")} · ${esc(thread.customer.risk_band || "")} · ${num(thread.customer.visit_count)} visits · ${money(thread.customer.total_spent)}</div></div>
+        <div class="grow"></div><a class="btn sm" href="#/customers/${thread.customer.id}">Profile</a></div>
+      <div class="bd" style="flex:1;overflow:auto"><div class="msgfeed">
+        ${(thread.messages || []).slice().reverse().map(m => `<div class="bubble ${m.direction === "in" ? "in" : "out"}">
+          ${linkify(m.body)}
+          <div class="mt">${m.direction === "in" ? "Customer" : (m.channel + " · " + (m.driver || "sandbox"))} · ${dt(m.created_at)}${m.status ? " · " + esc(m.status) : ""}${m.intent ? " · intent: " + esc(m.intent) : ""}</div>
+        </div>`).join("") || `<div class="empty">No messages in this thread yet</div>`}
+      </div></div>
+      <div style="padding:12px;border-top:1px solid var(--line);display:flex;gap:8px">
+        <input class="input" id="replyBox" placeholder="Write a message… (sent over WhatsApp)" onkeydown="if(event.key==='Enter')sendReply(${thread.customer.id})">
+        <button class="btn primary" onclick="sendReply(${thread.customer.id})">Send</button>
+      </div>` : `<div class="empty"><div class="big">✉</div>Pick a conversation on the left</div>`}
+    </div>
+  </div>`);
+});
+
+function linkify(s) {
+  return esc(s || "").replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>').replace(/\n/g, "<br>");
+}
+
+async function sendReply(cid) {
+  const box = $("#replyBox");
+  const body = (box.value || "").trim();
+  if (!body) return;
+  try {
+    await api("/api/customers/" + cid + "/message", {method: "POST", body: {body}});
+    toast("Message queued & sent", "ok");
+    render("/inbox/" + cid);
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+async function simulateReply(cid) {
+  if (!cid) { toast("Pick a conversation first", "bad"); return; }
+  openModal("Simulate an inbound reply", `
+    <div class="tiny muted mb12">This is how a real WhatsApp/SMS reply lands. Rebuy will detect the intent — an order, a snooze, an opt-out — and update the reminder and customer record automatically.</div>
+    <div class="field"><label class="f">Customer says</label>
+      <select class="input" id="simPreset" onchange="$('#simText').value=this.value">
+        <option value="Yes I need 2 please, can you deliver today?">“Yes I need 2 please, can you deliver today?” (order)</option>
+        <option value="Not yet, remind me next week">“Not yet, remind me next week” (snooze)</option>
+        <option value="Too expensive, any discount?">“Too expensive, any discount?” (negotiation)</option>
+        <option value="Send me the price">“Send me the price” (question)</option>
+        <option value="Stop messaging me">“Stop messaging me” (opt-out)</option>
+      </select></div>
+    <div class="field"><label class="f">Or type anything</label><textarea class="input" id="simText">Yes I need 2 please, can you deliver today?</textarea></div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="doSimulate(${cid})">Send as customer</button>`);
+}
+async function doSimulate(cid) {
+  const body = $("#simText").value;
+  try {
+    const r = await api("/api/inbox/simulate-reply", {method: "POST", body: {customer_id: cid, text: body}});
+    closeModal();
+    toast("Reply received — intent: " + (r.intent || "unknown"), "ok");
+    render("/inbox/" + cid);
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+/* ===================================================================== CUSTOMERS */
+let CUST = {page: 1, search: "", risk: "", sort: "recent"};
+page("/customers", {}, async (ctx) => {
+  if (ctx.rest[0]) return customerDetail(Number(ctx.rest[0]));
+  const q = new URLSearchParams({page: CUST.page, per: 25, search: CUST.search, risk: CUST.risk, sort: CUST.sort});
+  const d = await api("/api/customers?" + q);
+  const bands = d.bands || [];
+  const bandTotal = bands.reduce((a, b) => a + b.n, 0);
+  return shell(`
+  <div class="card"><div class="bd">
+    <div class="spread wrap" style="gap:10px">
+      <div class="sr" style="flex:1;min-width:220px"><span class="ic">⌕</span>
+        <input class="input" id="custSearch" placeholder="Search name, phone, email or area…" value="${esc(CUST.search)}"
+          onkeydown="if(event.key==='Enter')custFilter()"></div>
+      <select class="input" style="width:auto" id="custSort" onchange="custFilter()">
+        ${[["recent", "Most recent"], ["spend", "Biggest spenders"], ["visits", "Most visits"], ["risk", "Risk band"], ["name", "Name A–Z"]].map(([v, l]) => `<option value="${v}" ${CUST.sort === v ? "selected" : ""}>${l}</option>`).join("")}
+      </select>
+      <button class="btn" onclick="custFilter()">Search</button>
+      <div class="grow"></div>
+      <button class="btn" onclick="exportCsv('/api/customers?per=200', 'customers')">⇩ Export</button>
+      <button class="btn primary" onclick="customerModal()">＋ Add customer</button>
+    </div>
+    <div class="chips mt12">
+      <span class="chip ${!CUST.risk ? "on" : ""}" onclick="CUST.risk='';CUST.page=1;render('/customers')">All ${bandTotal ? "(" + num(bandTotal) + ")" : ""}</span>
+      ${bands.sort((a, b) => b.n - a.n).map(b => `<span class="chip ${CUST.risk === b.band ? "on" : ""}" onclick="CUST.risk='${b.band}';CUST.page=1;render('/customers')">${esc(RISK[b.band] ? RISK[b.band][0] : b.band)} (${num(b.n)})</span>`).join("")}
+    </div>
+  </div></div>
+
+  <div class="card mt16">
+    <div class="scrollx"><table class="t"><thead><tr>
+      <th style="width:34px"><input type="checkbox" id="selAll" onchange="toggleAll(this)"></th>
+      <th>Customer</th><th>Contact</th><th>Health</th><th class="right">Visits</th><th class="right">Total spent</th>
+      <th>Last purchase</th><th class="right">Actions</th></tr></thead><tbody>
+      ${(d.rows || []).map(c => `<tr class="click">
+        <td onclick="event.stopPropagation()"><input type="checkbox" class="csel" value="${c.id}" onchange="updateSelBar()"></td>
+        <td onclick="location.hash='#/customers/${c.id}'"><div class="row" style="gap:9px">${avatar(c.name)}<div><div style="font-weight:650">${esc(c.name)}</div><div class="tiny muted">${esc(c.area || "")}${c.pending_reminders ? ` · <span class="badge brand">${c.pending_reminders} queued</span>` : ""}</div></div></div></td>
+        <td onclick="location.hash='#/customers/${c.id}'"><div class="tiny">${esc(c.phone || "—")}</div><div class="tiny muted">${esc(c.email || "")}</div></td>
+        <td onclick="location.hash='#/customers/${c.id}'">${riskBadge(c.risk_band)}</td>
+        <td class="right" onclick="location.hash='#/customers/${c.id}'">${num(c.visit_count)}</td>
+        <td class="right" onclick="location.hash='#/customers/${c.id}'"><b>${money(c.total_spent)}</b></td>
+        <td onclick="location.hash='#/customers/${c.id}'">${dt(c.last_purchase_at)}</td>
+        <td class="right nowrap" onclick="event.stopPropagation()">
+          <button class="btn sm" onclick="messageCustomer(${c.id}, ${jsq(c.name)})">Message</button>
+          <a class="btn sm" href="#/customers/${c.id}">Open</a></td>
+      </tr>`).join("") || `<tr><td colspan="8"><div class="empty"><div class="big">☺</div>No customers match. <a href="#/import">Import your sales book</a> or add one manually.</div></td></tr>`}
+    </tbody></table></div>
+    <div class="pager">
+      <span>${num(d.total)} customers · page ${d.page} of ${d.pages}</span>
+      <button class="btn sm" ${d.page <= 1 ? "disabled" : ""} onclick="CUST.page--;render('/customers')">← Prev</button>
+      <button class="btn sm" ${d.page >= d.pages ? "disabled" : ""} onclick="CUST.page++;render('/customers')">Next →</button>
+    </div>
+  </div>
+
+  <div class="selbar" id="selbar">
+    <b id="selcount">0</b> selected
+    <div class="grow"></div>
+    <button class="btn sm primary" onclick="bulkMessage()">✉ Message selected</button>
+    <button class="btn sm" onclick="clearSel()">Clear</button>
+  </div>`);
+});
+
+function custFilter() {
+  CUST.search = $("#custSearch").value.trim();
+  CUST.sort = $("#custSort").value;
+  CUST.page = 1;
+  render("/customers");
+}
+function toggleAll(box) { $$(".csel").forEach(c => c.checked = box.checked); updateSelBar(); }
+function selectedIds() { return $$(".csel").filter(c => c.checked).map(c => Number(c.value)); }
+function updateSelBar() {
+  const n = selectedIds().length;
+  const bar = $("#selbar"), cnt = $("#selcount");
+  if (cnt) cnt.textContent = n;
+  if (bar) bar.classList.toggle("on", n > 0);
+}
+function clearSel() { $$(".csel").forEach(c => c.checked = false); updateSelBar(); }
+
+async function customerModal() {
+  openModal("Add a customer", `
+    <div class="g2" style="gap:10px">
+      <div class="field"><label class="f">Full name</label><input class="input" id="cName" placeholder="Jane Nakato"></div>
+      <div class="field"><label class="f">Phone (WhatsApp)</label><input class="input" id="cPhone" placeholder="+256 700 000 000"></div>
+    </div>
+    <div class="g2" style="gap:10px">
+      <div class="field"><label class="f">Email (optional)</label><input class="input" id="cEmail" placeholder="jane@email.com"></div>
+      <div class="field"><label class="f">Area / neighbourhood</label><input class="input" id="cArea" placeholder="Ntinda"></div>
+    </div>
+    <div class="field"><label class="f">Birthday (optional — Rebuy sends a treat)</label><input class="input" id="cBirthday" type="date"></div>
+    <div class="field"><label class="f">Tags</label><input class="input" id="cTags" placeholder="vip, wholesale"><div class="hint">Comma separated. Used for segments.</div></div>
+    <label class="row" style="gap:8px;font-size:13px"><input type="checkbox" id="cOptIn" checked> Customer agreed to receive WhatsApp / SMS reminders</label>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="doAddCustomer()">Add customer</button>`);
+}
+async function doAddCustomer() {
+  try {
+    const body = {name: $("#cName").value, phone: $("#cPhone").value, email: $("#cEmail").value,
+                  area: $("#cArea").value, birthday: $("#cBirthday").value, tags: $("#cTags").value,
+                  opted_in: $("#cOptIn").checked};
+    if (!body.name && !body.phone) { toast("Enter a name or a phone", "bad"); return; }
+    await api("/api/customers", {method: "POST", body});
+    closeModal(); toast("Customer added", "ok"); render("/customers");
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+async function messageCustomer(cid, name) {
+  openModal("Message " + name, `
+    <div class="field"><label class="f">Message</label><textarea class="input" id="adhocBody">Hi ${esc(name)}, it's ${esc(S.shop ? S.shop.name : "us")} 👋</textarea>
+      <div class="hint">Placeholders: {{name}}, {{shop}}, {{product}}, {{last_item}}, {{days_since}}, {{coupon}}. Sent over the customer's preferred channel.</div></div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="doAdhoc(${cid})">Send now</button>`);
+}
+async function doAdhoc(cid) {
+  try {
+    const body = $("#adhocBody").value;
+    const r = await api("/api/customers/" + cid + "/message", {method: "POST", body: {body}});
+    closeModal(); toast("Message sent over " + ((r.message && r.message.channel) || "whatsapp"), "ok");
+    render(S.route);
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+async function bulkMessage() {
+  const ids = selectedIds();
+  if (!ids.length) return;
+  const seg = ids.join(",");
+  location.hash = "#/segments";
+  setTimeout(() => buildCampaign({ids: seg}), 60);
+}
+
+async function customerDetail(cid) {
+  const d = await api("/api/customers/" + cid);
+  const c = d.customer, st = d.stats;
+  const sales = d.sales || [];
+  return shell(`<div class="row mb12"><a class="btn sm" href="#/customers">← All customers</a></div>
+  <div class="grid g21">
+    <div>
+      <div class="card"><div class="bd">
+        <div class="row" style="gap:14px">
+          ${avatar(c.name, 56)}
+          <div style="flex:1">
+            <div class="row" style="gap:8px"><h2 style="margin:0;font-size:20px;letter-spacing:-.4px">${esc(c.name)}</h2>${riskBadge(c.risk_band)}</div>
+            <div class="tiny muted mt8">${esc(c.phone || "no phone")} · ${esc(c.email || "no email")} · ${esc(c.area || "")}${c.opted_in ? "" : " · <span class='badge bad'>opted out</span>"}</div>
+            <div class="chips mt8">${(c.tags || "").split(",").filter(Boolean).map(t => `<span class="badge">${esc(t.trim())}</span>`).join("")}
+              ${c.birthday ? `<span class="badge info">🎂 ${esc(c.birthday)}</span>` : ""}</div>
+          </div>
+          <div class="row" style="gap:8px">
+            <button class="btn" onclick="messageCustomer(${c.id}, ${jsq(c.name)})">✉ Message</button>
+            <a class="btn primary" href="#/sales/new?customer=${c.id}">＋ New sale</a>
+          </div>
+        </div>
+      </div></div>
+
+      <div class="card mt16"><div class="hd"><h3>Next best action</h3></div><div class="bd">
+        <div style="font-size:13.5px">${esc(st.next_best_action || "")}</div>
+        <div class="stat-tiles mt12">
+          <div class="tile"><div class="v">${st.days_since_last == null ? "—" : st.days_since_last}</div><div class="l">days since last buy</div></div>
+          <div class="tile"><div class="v">${st.avg_cycle_days || "—"}</div><div class="l">avg product cycle</div></div>
+          <div class="tile"><div class="v">${st.avg_gap_days == null ? "—" : st.avg_gap_days}</div><div class="l">avg days between visits</div></div>
+          <div class="tile"><div class="v">${money(st.avg_basket)}</div><div class="l">avg basket</div></div>
+        </div>
+      </div></div>
+
+      <div class="card mt16"><div class="hd"><h3>Purchase history</h3><div class="grow"></div><span class="badge">${num(sales.length)} shown</span></div>
+        <div class="bd" style="padding:0">
+        ${sales.map(s => `<details class="adv" style="margin:10px 14px">
+          <summary><div class="spread"><span>${esc(s.receipt_no || "Sale #" + s.id)} · ${datef(s.sale_date)}</span><b>${money(s.total)}</b></div></summary>
+          <div class="inner">
+            <table class="t"><thead><tr><th>Item</th><th>Qty</th><th class="right">Price</th><th>Lasts</th><th>Restock date</th></tr></thead><tbody>
+            ${(s.lines || []).map(l => `<tr><td>${esc(l.product_name)} ${l.kind === "service" ? `<span class="badge info">service</span>` : ""}</td>
+              <td>${num(l.qty)} ${esc(l.unit || "")}</td><td class="right">${money(l.line_total)}</td>
+              <td>${l.cycle_days ? l.cycle_days + " days" : "—"}</td><td>${datef(l.depletes_on)}</td></tr>`).join("")}
+            </tbody></table>
+            <div class="tiny muted mt8">Source: ${esc(s.source || "manual")} · logged by ${esc(s.staff_name || "—")}</div>
+          </div></details>`).join("") || `<div class="empty">No purchases recorded yet</div>`}
+        </div>
+      </div>
+
+      <div class="card mt16"><div class="hd"><h3>Reminders &amp; messages</h3></div><div class="bd">
+        <div class="timeline">
+        ${(d.reminders || []).slice(0, 14).map(r => `<div class="tl"><div class="tt">${esc(r.kind)} · ${esc(r.product_name || "")} <span class="badge ${STATUS_BADGE[r.status] || ""}">${esc(r.status)}</span> <span class="badge">${CHAN_ICON[r.channel] || ""} ${esc(r.channel)}</span></div>
+          <div class="ss">due ${datef(r.due_on)}${r.sent_at ? " · sent " + dt(r.sent_at) : ""}</div></div>`).join("") || `<div class="empty">No reminders yet</div>`}
+        </div>
+      </div></div>
+    </div>
+
+    <div>
+      <div class="card"><div class="hd"><h3>Lifetime value</h3></div><div class="bd">
+        <div class="invoice-total">${money(c.total_spent)}</div>
+        <div class="tiny muted">${num(c.visit_count)} visits · ${money(st.avg_basket)} average basket</div>
+        <div class="hr"></div>
+        <div class="statline"><span class="muted">Est. lifetime value</span><b>${money(c.ltv)}</b></div>
+        <div class="statline"><span class="muted">Loyalty points</span><b>${num(c.loyalty_points)}</b></div>
+        <div class="statline"><span class="muted">Preferred channel</span><b style="text-transform:capitalize">${esc(c.preferred_channel || "whatsapp")}</b></div>
+        <div class="statline"><span class="muted">First seen</span><b>${datef(c.first_seen_at)}</b></div>
+        <div class="statline"><span class="muted">Notes</span><b>${esc(c.notes || "—")}</b></div>
+      </div></div>
+
+      <div class="card mt16"><div class="hd"><h3>Coupons</h3></div><div class="bd" style="padding:8px 16px">
+        ${(d.coupons || []).map(k => `<div class="recent-li"><div class="grow"><div class="nm mono">${esc(k.code)}</div>
+          <div class="ss">${k.percent}% off · ${k.status}${k.expires_on ? " · expires " + datef(k.expires_on) : ""}</div></div>
+          <span class="badge ${k.status === "redeemed" ? "ok" : k.status === "expired" ? "bad" : ""}">${esc(k.status)}</span></div>`).join("") || `<div class="empty tiny">No coupons yet</div>`}
+      </div></div>
+
+      <div class="card mt16"><div class="hd"><h3>Loyalty activity</h3></div><div class="bd" style="padding:8px 16px">
+        ${(d.loyalty || []).map(l => `<div class="recent-li"><div class="grow"><div class="nm" style="text-transform:capitalize">${esc(l.reason)}</div>
+          <div class="ss">${dt(l.created_at)}</div></div><b>${l.points > 0 ? "+" : ""}${num(l.points)}</b></div>`).join("") || `<div class="empty tiny">No loyalty activity yet</div>`}
+      </div></div>
+    </div>
+  </div>`);
+}
+
+/* ===================================================================== REMINDERS */
+page("/reminders", {}, async (ctx) => {
+  const [d, shop] = await Promise.all([api("/api/reminders?limit=100"), api("/api/shop")]);
+  const auto = shop.shop.auto_reminders;
+  return shell(`
+  <div class="grid g4">
+    <div class="card kpi"><div class="label">Auto-reminders</div>
+      <div class="row mt8" style="gap:9px"><button class="switch ${auto ? "on" : ""}" onclick="toggleAuto(${auto ? 0 : 1})"></button>
+      <b>${auto ? "On" : "Paused"}</b></div>
+      <div class="foot">${auto ? "Rebuy sends each reminder automatically." : "Reminders are queued but not sent."}</div></div>
+    <div class="card kpi"><div class="label">Due now</div><div class="value">${num(d.counts && d.counts.scheduled)}</div>
+      <div class="foot"><button class="btn sm primary mt8" onclick="runTick(true)">⚡ Send due reminders</button></div></div>
+    <div class="card kpi"><div class="label">Sent (all time)</div><div class="value">${num(d.counts && d.counts.sent)}</div>
+      <div class="foot">upcoming replenishment &amp; re-booking</div></div>
+    <div class="card kpi"><div class="label">Converted</div><div class="value">${num(d.counts && d.counts.converted)}</div>
+      <div class="foot">reminders that turned into sales</div></div>
+  </div>
+
+  <div class="card mt16"><div class="hd"><h3>Reminder queue</h3><div class="grow"></div>
+    <div class="chips">${["due", "scheduled", "sent", "all"].map(t => `<span class="chip" onclick="loadReminders('${t}')" id="rtab-${t}">${t}</span>`).join("")}</div></div>
+    <div class="scrollx" id="remTable"></div>
+  </div>
+
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>How reminders are timed</h3></div><div class="bd">
+      <div class="statline"><span class="muted">Lead time before restock date</span><b>${shop.shop.reminder_lead_days} days</b></div>
+      <div class="statline"><span class="muted">Max follow-ups per purchase</span><b>${shop.shop.max_followups}</b></div>
+      <div class="statline"><span class="muted">Max messages per customer / month</span><b>${shop.shop.max_msgs_per_customer_month}</b></div>
+      <div class="statline"><span class="muted">Quiet hours</span><b>${esc(shop.shop.quiet_start)} – ${esc(shop.shop.quiet_end)}</b></div>
+      <div class="tiny muted mt12">A reminder becomes “due” <b>lead_time</b> days before the product is expected to run out, and goes out during the next active run of the queue.</div>
+      <a class="btn mt12" href="#/settings">Edit reminder settings</a>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Recently sent</h3></div><div class="bd" style="padding:0">
+      <div class="scrollx"><table class="t"><thead><tr><th>Customer</th><th>Product</th><th>Sent</th><th>Status</th></tr></thead><tbody>
+        ${(d.rows || []).filter(r => r.sent_at).slice(0, 8).map(r => `<tr><td>${esc(r.customer)}</td><td>${esc(r.product_name || r.kind)}</td><td>${dt(r.sent_at)}</td>
+          <td><span class="badge ${STATUS_BADGE[r.status] || ""}">${esc(r.status)}</span></td></tr>`).join("") || `<tr><td colspan="4"><div class="empty">Nothing sent yet — click “Send due reminders”.</div></td></tr>`}
+      </tbody></table></div>
+    </div></div>
+  </div>`);
+}, {mount: () => loadReminders("due")});
+
+async function loadReminders(tab) {
+  $$("[id^=rtab-]").forEach(c => c.classList.toggle("on", c.id === "rtab-" + tab));
+  const box = $("#remTable");
+  if (!box) return;
+  box.innerHTML = `<div class="empty">Loading…</div>`;
+  const d = await api("/api/reminders?" + (tab === "due" ? "due=today" : tab === "all" ? "" : "status=" + tab) + "&limit=120");
+  const rows = d.rows || [];
+  box.innerHTML = `<table class="t"><thead><tr><th>Due</th><th>Customer</th><th>Reason</th><th>Channel</th><th>Status</th><th class="right">Actions</th></tr></thead><tbody>
+    ${rows.map(r => `<tr>
+      <td class="nowrap">${r.due_on <= todayStr() ? `<span class="badge warn">${dt(r.due_on)}</span>` : dt(r.due_on)}</td>
+      <td><a href="#/customers/${r.customer_id}"><b>${esc(r.customer)}</b></a><div class="tiny muted">${esc(r.phone || "")}</div></td>
+      <td>${esc(r.product_name || r.kind)} <span class="badge">${esc(r.kind)}</span></td>
+      <td><span class="badge">${CHAN_ICON[r.channel] || ""} ${esc(r.channel)}</span></td>
+      <td><span class="badge ${STATUS_BADGE[r.status] || ""}">${esc(r.status)}</span></td>
+      <td class="right nowrap">
+        ${["scheduled", "failed"].includes(r.status) ? `<button class="btn sm primary" onclick="sendReminder(${r.id})">Send now</button>
+          <button class="btn sm" onclick="snoozeReminder(${r.id})">Snooze</button>
+          <button class="btn sm danger" onclick="skipReminder(${r.id})">Skip</button>` : `<a class="btn sm" href="#/customers/${r.customer_id}">View</a>`}
+      </td></tr>`).join("") || `<tr><td colspan="6"><div class="empty"><div class="big">⏰</div>Nothing in this queue</div></td></tr>`}
+  </tbody></table>`;
+}
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const daysFromNow = n => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+async function toggleAuto(v) {
+  try { await api("/api/shop", {method: "PATCH", body: {auto_reminders: v}}); S.shop.auto_reminders = v; toast(v ? "Auto-reminders on" : "Auto-reminders paused", "ok"); location.reload(); }
+  catch (e) { toast(e.message, "bad"); }
+}
+async function sendReminder(id) {
+  try { const r = await api(`/api/reminders/${id}/send`, {method: "POST"}); toast("Reminder queued and sent", "ok"); loadReminders("due"); }
+  catch (e) { toast(e.message, "bad"); }
+}
+async function skipReminder(id) {
+  try { await api(`/api/reminders/${id}/skip`, {method: "POST", body: {}}); toast("Reminder skipped"); loadReminders("scheduled"); }
+  catch (e) { toast(e.message, "bad"); }
+}
+async function snoozeReminder(id) {
+  try { await api(`/api/reminders/${id}/snooze`, {method: "POST", body: {days: 7}}); toast("Snoozed 7 days"); loadReminders("scheduled"); }
+  catch (e) { toast(e.message, "bad"); }
+}
+
+/* ===================================================================== SALES */
+let SALES = {page: 1, search: ""};
+page("/sales", {}, async (ctx) => {
+  if (ctx.rest[0] === "new") { const html = await saleNew(ctx); setTimeout(mountSaleNew, 0); return html; }
+  if (ctx.rest[0]) return saleDetail(Number(ctx.rest[0]));
+  const d = await api(`/api/sales?page=${SALES.page}&per=25&search=${encodeURIComponent(SALES.search)}`);
+  const sm = d.summary || {};
+  return shell(`
+  <div class="grid g4">
+    <div class="card kpi"><div class="label">Sales recorded</div><div class="value">${num(sm.n)}</div><div class="foot">matching your filter</div></div>
+    <div class="card kpi"><div class="label">Revenue</div><div class="value">${money(sm.revenue)}</div><div class="foot">all time in filter</div></div>
+    <div class="card kpi"><div class="label">Average basket</div><div class="value">${money(sm.basket)}</div><div class="foot">per receipt</div></div>
+    <div class="card kpi brand"><div class="label">Every sale starts a reminder clock</div>
+      <div class="value" style="font-size:15px;font-weight:600;line-height:1.35;margin-top:10px">Record it once — Rebuy handles the follow-up.</div>
+      <div class="foot"><a href="#/sales/new" style="color:#fff;text-decoration:underline">Record a sale →</a></div></div>
+  </div>
+
+  <div class="card mt16"><div class="hd"><h3>Sales</h3><div class="grow"></div>
+    <div class="sr" style="width:230px"><span class="ic">⌕</span><input class="input" id="saleSearch" placeholder="Receipt, customer, phone…" value="${esc(SALES.search)}" onkeydown="if(event.key==='Enter'){SALES.search=this.value;SALES.page=1;render('/sales')}"></div>
+    <a class="btn primary sm" href="#/sales/new">＋ New sale</a></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Items</th><th>Source</th><th class="right">Total</th></tr></thead><tbody>
+    ${(d.rows || []).map(s => `<tr class="click" onclick="location.hash='#/sales/${s.id}'">
+      <td class="mono">${esc(s.receipt_no || "—")}</td><td class="nowrap">${datef(s.sale_date)}</td>
+      <td>${esc(s.customer_name || "Walk-in")}<div class="tiny muted">${esc(s.customer_phone || "")}</div></td>
+      <td class="tiny">${esc((s.items || "").slice(0, 60))}${(s.items || "").length > 60 ? "…" : ""}</td>
+      <td><span class="badge">${esc(s.source || "manual")}</span></td>
+      <td class="right"><b>${money(s.total)}</b></td></tr>`).join("") || `<tr><td colspan="6"><div class="empty"><div class="big">▤</div>No sales yet. <a href="#/sales/new">Record your first sale</a> or <a href="#/import">import your sales book</a>.</div></td></tr>`}
+    </tbody></table></div>
+    <div class="pager"><span>${num(d.total)} sales · page ${d.page} of ${d.pages}</span>
+      <button class="btn sm" ${d.page <= 1 ? "disabled" : ""} onclick="SALES.page--;render('/sales')">← Prev</button>
+      <button class="btn sm" ${d.page >= d.pages ? "disabled" : ""} onclick="SALES.page++;render('/sales')">Next →</button></div>
+  </div>`);
+});
+
+async function saleNew() {
+  const [cust, prods] = await Promise.all([api("/api/customers?per=200&sort=recent"), api("/api/products?per=200")]);
+  const preCust = new URLSearchParams((location.hash.split("?")[1] || "")).get("customer") || "";
+  const rows = prods.rows || prods.products || [];
+  return shell(`<div class="row mb12"><a class="btn sm" href="#/sales">← All sales</a></div>
+  <div class="grid g21">
+    <div class="card"><div class="hd"><h3>New sale</h3><div class="tiny muted">Every line item starts its own restock clock</div></div>
+      <div class="bd">
+        ${preCust ? `<div class="tiny muted mb8">Recording a sale for an existing customer.</div>` : ""}
+        <div class="g2" style="gap:10px">
+          <div class="field"><label class="f">Customer</label>
+            <input class="input" id="saleCustSearch" list="custList" placeholder="Search existing customers…" oninput="pickCust(this.value)" value="${preCust ? esc((((cust.rows||[]).find(c=>c.id===Number(preCust))||{}).name||"") + " · " + ((((cust.rows||[]).find(c=>c.id===Number(preCust))||{}).phone)||"")) : ""}">
+            <datalist id="custList">${(cust.rows || []).map(c => `<option data-id="${c.id}" value="${esc(c.name)} · ${esc(c.phone || "")}">`).join("")}</datalist>
+            <div class="hint" id="custPick">Or type a new name below to create them.</div>
+          </div>
+          <div class="field"><label class="f">Date</label><input class="input" id="saleDate" type="date" value="${todayStr()}"></div>
+        </div>
+        <details class="adv"><summary>New customer? Enter their details</summary><div class="inner">
+          <div class="g3" style="gap:10px">
+            <div class="field"><label class="f">Name</label><input class="input" id="newCustName" placeholder="Jane Nakato"></div>
+            <div class="field"><label class="f">Phone</label><input class="input" id="newCustPhone" placeholder="+256…"></div>
+            <div class="field"><label class="f">Email</label><input class="input" id="newCustEmail" placeholder="optional"></div>
+          </div>
+        </div></details>
+        <div class="hr"></div>
+        <label class="f">Items</label>
+        <div id="saleLines"></div>
+        <div class="row wrap mt12" style="gap:8px">
+          <button class="btn sm" onclick="addLine()">＋ Add line</button>
+          <div class="grow"></div>
+          <div class="tiny muted" id="saleTotal">Total: <b>UGX 0</b></div>
+        </div>
+        <div class="hr"></div>
+        <div class="g3" style="gap:10px">
+          <div class="field"><label class="f">Receipt no.</label><input class="input" id="saleReceipt" placeholder="auto"></div>
+          <div class="field"><label class="f">Payment</label><select class="input" id="salePay"><option>cash</option><option>mobile money</option><option>card</option><option>credit</option></select></div>
+          <div class="field"><label class="f">Staff</label><input class="input" id="saleStaff" value="${esc(S.user ? S.user.name : "")}"></div>
+        </div>
+        <button class="btn primary" style="width:100%;justify-content:center;padding:11px" onclick="submitSale()">Record sale &amp; schedule reminders</button>
+      </div>
+    </div>
+    <div>
+      <div class="card"><div class="hd"><h3>Quick add from catalogue</h3></div><div class="bd" style="max-height:320px;overflow:auto">
+        ${rows.slice(0, 40).map(p => `<div class="recent-li click" style="cursor:pointer" onclick='addLine(${JSON.stringify({name: p.name, price: p.unit_price, unit: p.unit, cycle: p.cycle_days, kind: p.kind})})'>
+          <div class="grow"><div class="nm">${esc(p.name)}</div><div class="ss">${esc(p.kind)} · every ${p.cycle_days}d · ${money(p.unit_price)}</div></div>
+          <span class="badge brand">＋</span></div>`).join("") || `<div class="empty tiny">No products yet — just type item names and Rebuy learns them.</div>`}
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>💡 Why this matters</h3></div><div class="bd tiny muted">
+        Rebuy sets a restock date per item from its category and quantity (a 2kg rice bag ≈ 21 days; a haircut ≈ 28 days; a car service ≈ 90 days).
+        It then messages the customer a few days before that date — and follows up if they don't reply.
+      </div></div>
+    </div>
+  </div>`);
+}
+
+let SALE = {cid: null, lines: []};
+function mountSaleNew() {
+  if (!SALE.lines.length) SALE.lines = [{name: "", price: "", qty: 1, unit: "pc", cycle: "", kind: "goods"}];
+  if (location.hash.indexOf("?") > -1) {
+    const cid = new URLSearchParams(location.hash.split("?")[1]).get("customer");
+    if (cid) { SALE.cid = Number(cid); pickCust($("#saleCustSearch").value); }
+  }
+  renderLines();
+}
+function addLine(pre) {
+  if (pre && pre.name) {
+    const existing = SALE.lines.find(l => l.name === pre.name && !l.price);
+    if (existing) { existing.price = pre.price; existing.cycle = pre.cycle; renderLines(); return; }
+    SALE.lines.push({name: pre.name, price: pre.price, qty: 1, unit: pre.unit || "pc", cycle: pre.cycle || "", kind: pre.kind || "goods"});
+  } else {
+    SALE.lines.push({name: "", price: "", qty: 1, unit: "pc", cycle: "", kind: "goods"});
+  }
+  renderLines();
+}
+function removeLine(i) { SALE.lines.splice(i, 1); renderLines(); }
+function renderLines() {
+  const box = $("#saleLines");
+  if (!box) return;
+  if (!SALE.lines.length) SALE.lines.push({name: "", price: "", qty: 1, unit: "pc", cycle: "", kind: "goods"});
+  box.innerHTML = SALE.lines.map((l, i) => `<div class="row mb8" style="gap:7px;align-items:flex-start">
+    <input class="input" style="flex:2.2" placeholder="Item or service name" value="${esc(l.name)}" oninput="SALE.lines[${i}].name=this.value">
+    <input class="input" style="flex:.7" type="number" step="0.01" placeholder="Qty" value="${esc(l.qty)}" oninput="SALE.lines[${i}].qty=this.value;calcTotal()">
+    <input class="input" style="flex:1" type="number" step="0.01" placeholder="Unit price" value="${esc(l.price)}" oninput="SALE.lines[${i}].price=this.value;calcTotal()">
+    <input class="input" style="flex:.8" type="number" placeholder="Cycle days" title="How long this lasts before the customer needs it again" value="${esc(l.cycle)}" oninput="SALE.lines[${i}].cycle=this.value">
+    <button class="btn sm danger" onclick="removeLine(${i})">✕</button></div>`).join("");
+  calcTotal();
+}
+function calcTotal() {
+  const t = SALE.lines.reduce((a, l) => a + (Number(l.qty || 0) * Number(l.price || 0)), 0);
+  const el = $("#saleTotal"); if (el) el.innerHTML = `Total: <b>${money(t)}</b>`;
+}
+function pickCust(v) {
+  const opt = $$("#custList option").find(o => o.value === v);
+  SALE.cid = opt ? Number(opt.dataset.id) : null;
+  const el = $("#custPick");
+  if (el) el.textContent = SALE.cid ? "✓ Existing customer selected" : "Or type a new name below to create them.";
+}
+async function submitSale() {
+  const lines = SALE.lines.filter(l => (l.name || "").trim());
+  if (!lines.length) { toast("Add at least one item", "bad"); return; }
+  const body = {
+    customer_id: SALE.cid || undefined,
+    customer_name: $("#newCustName") ? $("#newCustName").value : "",
+    customer_phone: $("#newCustPhone") ? $("#newCustPhone").value : "",
+    customer_email: $("#newCustEmail") ? $("#newCustEmail").value : "",
+    date: $("#saleDate").value, receipt_no: $("#saleReceipt").value,
+    payment_method: $("#salePay").value, staff_name: $("#saleStaff").value,
+    items: lines.map(l => ({product_name: l.name, qty: Number(l.qty || 1), unit_price: Number(l.price || 0),
+                            cycle_days: l.cycle ? Number(l.cycle) : undefined, kind: l.kind, unit: l.unit})),
+  };
+  if (!SALE.cid) {
+    // let the API create the customer from the typed details (or a walk-in name)
+    body.customer_name = body.customer_name || ($("#saleCustSearch") ? $("#saleCustSearch").value.split(" · ")[0] : "") || "Walk-in customer";
+  }
+  try {
+    const r = await api("/api/sales", {method: "POST", body});
+    toast(`Sale recorded · ${r.reminders_planned} reminder(s) scheduled`, "ok");
+    SALE = {cid: null, lines: []};
+    location.hash = "#/sales/" + r.sale_id;
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+async function saleDetail(sid) {
+  const s = await api("/api/sales/" + sid);
+  return shell(`<div class="row mb12"><a class="btn sm" href="#/sales">← All sales</a></div>
+  <div class="grid g21">
+    <div class="card"><div class="hd"><h3>Receipt ${esc(s.receipt_no || "#" + s.id)}</h3><div class="grow"></div>
+      <span class="badge">${esc(s.source || "manual")}</span><span class="badge">${esc(s.payment_method || "")}</span></div>
+      <div class="bd">
+        <div class="spread"><div>
+          <div style="font-weight:700;font-size:16px">${esc(s.customer ? s.customer.name : "Walk-in")}</div>
+          <div class="tiny muted">${esc(s.customer ? s.customer.phone || "" : "")} · ${datef(s.sale_date)} ${esc(s.sale_time || "")}</div>
+        </div><div class="right"><div class="invoice-total">${money(s.total)}</div><div class="tiny muted">${(s.items || []).length} line items</div></div></div>
+        <div class="hr"></div>
+        <table class="t"><thead><tr><th>Item</th><th>Qty</th><th class="right">Line total</th><th>Restock on</th><th>Reminder</th></tr></thead><tbody>
+        ${(s.items || []).map(l => `<tr><td><b>${esc(l.product_name)}</b> <span class="badge">${esc(l.kind)}</span><div class="tiny muted">cycle ${l.cycle_days || "—"} days</div></td>
+          <td>${num(l.qty)} ${esc(l.unit || "")}</td><td class="right">${money(l.line_total)}</td><td>${datef(l.depletes_on)}</td>
+          <td>${(s.reminders || []).filter(r => r.sale_item_id === l.id).map(r => `<span class="badge ${STATUS_BADGE[r.status] || ""}">${esc(r.status)}</span>`).join(" ") || `<span class="badge">not scheduled</span>`}</td></tr>`).join("")}
+        </tbody></table>
+        <div class="hr"></div>
+        <div class="row"><button class="btn danger sm" onclick="deleteSale(${s.id})">Delete sale</button><div class="grow"></div>
+        ${s.customer ? `<a class="btn sm" href="#/customers/${s.customer.id}">Customer profile →</a>` : ""}</div>
+      </div></div>
+    <div class="card"><div class="hd"><h3>Reminder timeline</h3></div><div class="bd"><div class="timeline">
+      ${(s.reminders || []).map(r => `<div class="tl"><div class="tt">${esc(r.kind)} <span class="badge ${STATUS_BADGE[r.status] || ""}">${esc(r.status)}</span></div>
+        <div class="ss">${esc(r.product_name || "")} · due ${datef(r.due_on)}${r.sent_at ? " · sent " + dt(r.sent_at) : ""}</div></div>`).join("") || `<div class="empty tiny">No reminders for this sale</div>`}
+    </div></div></div>
+  </div>`);
+}
+async function deleteSale(id) {
+  if (!confirm("Delete this sale and its reminders?")) return;
+  try { await api("/api/sales/" + id, {method: "DELETE"}); toast("Sale deleted"); location.hash = "#/sales"; }
+  catch (e) { toast(e.message, "bad"); }
+}
+
+/* ===================================================================== PRODUCTS */
+page("/products", {}, async () => {
+  const d = await api("/api/products?per=300");
+  const rows = d.rows || d.products || [];
+  const cats = d.categories || [];
+  return shell(`
+  <div class="row wrap mb12" style="gap:9px">
+    <div class="sr" style="flex:1;min-width:220px"><span class="ic">⌕</span><input class="input" id="prodSearch" placeholder="Search products & services…" oninput="filterProds(this.value)"></div>
+    <button class="btn primary" onclick="productModal()">＋ Add product or service</button>
+  </div>
+  <div class="grid g4 mb12">
+    <div class="card kpi"><div class="label">Products</div><div class="value">${num(rows.filter(p => p.kind === "goods").length)}</div><div class="foot">physical goods tracked</div></div>
+    <div class="card kpi"><div class="label">Services</div><div class="value">${num(rows.filter(p => p.kind === "service").length)}</div><div class="foot">re-booking cycles</div></div>
+    <div class="card kpi"><div class="label">Categories</div><div class="value">${num(cats.length)}</div><div class="foot">with default cycles</div></div>
+    <div class="card kpi"><div class="label">Average cycle</div><div class="value">${rows.length ? Math.round(rows.reduce((a, p) => a + (p.cycle_days || 0), 0) / rows.length) : 0}<span style="font-size:14px;font-weight:600"> days</span></div><div class="foot">time until a customer needs it again</div></div>
+  </div>
+  <div class="card"><div class="hd"><h3>Your catalogue</h3><div class="tiny muted">Cycle = how long one purchase typically lasts.</div></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>Name</th><th>Type</th><th>Category</th><th class="right">Price</th><th>Cycle</th><th class="right">Sold 90d</th><th class="right"></th></tr></thead><tbody id="prodBody">
+    ${rows.map(p => `<tr data-name="${esc(p.name.toLowerCase())}">
+      <td><b>${esc(p.name)}</b><div class="tiny muted">${esc(p.unit || "")} · ${esc(p.sku || "no SKU")}</div></td>
+      <td><span class="badge ${p.kind === "service" ? "info" : ""}">${esc(p.kind)}</span></td>
+      <td class="tiny">${esc(p.category || "—")}</td>
+      <td class="right">${money(p.unit_price)}</td>
+      <td><span class="badge">${p.cycle_days} days</span></td>
+      <td class="right">${num(p.sold_90d || 0)}</td>
+      <td class="right nowrap"><button class="btn sm" onclick='productModal(${JSON.stringify({id: p.id, name: p.name, kind: p.kind, category: p.category, unit: p.unit, unit_price: p.unit_price, cycle_days: p.cycle_days})})'>Edit</button>
+      <button class="btn sm danger" onclick="deleteProduct(${p.id})">✕</button></td></tr>`).join("") || `<tr><td colspan="7"><div class="empty"><div class="big">▦</div>No products yet. Add what you sell — Rebuy learns the restock cycle for each one.</div></td></tr>`}
+    </tbody></table></div>
+  </div>`);
+});
+function filterProds(v) {
+  const q = (v || "").toLowerCase();
+  $$("#prodBody tr[data-name]").forEach(tr => tr.style.display = !q || tr.dataset.name.includes(q) ? "" : "none");
+}
+function productModal(p) {
+  p = p || {};
+  const cats = ["Food & Staples","Beverages","Dairy & Eggs","Cooking & Fuel","Personal Care","Beauty & Hair","Baby Care","Cleaning","Health & Pharmacy","Hardware","Agro & Farm","Pet Care","Home & Kitchen","Electronics","Clothing","Service","Other"];
+  openModal(p.id ? "Edit product" : "Add a product or service", `
+    <div class="g2" style="gap:10px">
+      <div class="field"><label class="f">Name</label><input class="input" id="pName" value="${esc(p.name || "")}" placeholder="e.g. Rice 2kg or Hair wash"></div>
+      <div class="field"><label class="f">Type</label><select class="input" id="pKind">
+        <option value="goods" ${p.kind === "goods" ? "selected" : ""}>Goods — runs out</option>
+        <option value="service" ${p.kind === "service" ? "selected" : ""}>Service — re-book interval</option></select></div>
+    </div>
+    <div class="g3" style="gap:10px">
+      <div class="field"><label class="f">Category</label><select class="input" id="pCat">${cats.map(c => `<option ${p.category === c ? "selected" : ""}>${c}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">Unit price</label><input class="input" id="pPrice" type="number" step="100" value="${esc(p.unit_price || 0)}"></div>
+      <div class="field"><label class="f">Unit</label><input class="input" id="pUnit" value="${esc(p.unit || "pc")}" placeholder="pc, kg, litre"></div>
+    </div>
+    <div class="field"><label class="f">Restock / re-booking cycle (days)</label>
+      <input class="input" id="pCycle" type="number" value="${esc(p.cycle_days || "")}" placeholder="Leave blank to use the category default">
+      <div class="hint">How many days does one purchase last before the customer needs it again? Rice ≈ 21, milk ≈ 5, haircut ≈ 28, car service ≈ 90.</div></div>`,
+    `${p.id ? `<button class="btn danger" onclick="deleteProduct(${p.id},1)">Delete</button>` : ""}<div class="grow"></div>
+     <button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveProduct(${p.id || "null"})">${p.id ? "Save changes" : "Add product"}</button>`);
+}
+async function saveProduct(id) {
+  const body = {name: $("#pName").value, kind: $("#pKind").value, category: $("#pCat").value,
+                unit_price: Number($("#pPrice").value || 0), unit: $("#pUnit").value,
+                cycle_days: $("#pCycle").value ? Number($("#pCycle").value) : undefined};
+  if (!body.name.trim()) { toast("Give it a name", "bad"); return; }
+  try {
+    if (id) await api("/api/products/" + id, {method: "PATCH", body});
+    else await api("/api/products", {method: "POST", body});
+    closeModal(); toast("Saved", "ok"); render("/products");
+  } catch (e) { toast(e.message, "bad"); }
+}
+async function deleteProduct(id, insideModal) {
+  if (!confirm("Remove this product? Existing sales history stays intact.")) return;
+  try { await api("/api/products/" + id, {method: "DELETE"}); if (insideModal) closeModal(); toast("Removed"); render("/products"); }
+  catch (e) { toast(e.message, "bad"); }
+}
+
+/* ===================================================================== SEGMENTS & CRM */
+page("/segments", {}, async () => {
+  const d = await api("/api/campaigns");
+  const segs = d.segments || [];
+  return shell(`
+  <div class="grid g21">
+    <div class="card"><div class="hd"><h3>Ready-made audiences</h3><div class="tiny muted">Click one to build a message</div></div>
+      <div class="bd" style="padding:8px 16px">
+        ${segs.map(s => `<div class="recent-li">
+          <div class="avatar" style="background:${avColor(s.key)};border-radius:9px">${esc(s.icon || "◫")}</div>
+          <div class="grow"><div class="nm">${esc(s.label)}</div><div class="ss">${esc(s.description)}</div></div>
+          <div class="row" style="gap:8px"><span class="badge">${num(s.count)} customers</span>
+          <button class="btn sm primary" ${s.count ? "" : "disabled"} onclick='buildCampaign(${JSON.stringify({segment: s.key})})'>Message</button></div>
+        </div>`).join("") || `<div class="empty">No segments available</div>`}
+      </div></div>
+    <div class="card"><div class="hd"><h3>Send a custom message</h3></div><div class="bd">
+      <div class="tiny muted">Pick a segment, write the message, preview the audience and send. Rebuy respects opt-outs, quiet hours and monthly caps.</div>
+      <button class="btn primary mt12" style="width:100%;justify-content:center" onclick="buildCampaign({})">✉ New campaign</button>
+      <div class="hr"></div>
+      <div class="tiny muted">Recent campaigns</div>
+      ${(d.rows || []).slice(0, 6).map(c => `<div class="recent-li"><div class="grow"><div class="nm">${esc(c.name)}</div><div class="ss">${esc(c.status)} · ${num(c.sent)} delivered · ${c.coupon_code ? "code " + esc(c.coupon_code) : "no coupon"} · ${dt(c.created_at)}</div></div>
+        <span class="badge ${STATUS_BADGE[c.status] || ""}">${esc(c.status)}</span></div>`).join("") || `<div class="empty tiny">No campaigns yet</div>`}
+    </div></div>
+  </div>`);
+});
+
+async function buildCampaign(opts) {
+  opts = opts || {};
+  const segInfo = await api("/api/campaigns");
+  const segs = segInfo.segments || [];
+  window.__segments = segs;
+  openModal("New campaign", `
+    <div class="g2" style="gap:10px">
+      <div class="field"><label class="f">Campaign name</label><input class="input" id="campName" placeholder="Weekend win-back"></div>
+      <div class="field"><label class="f">Audience</label><select class="input" id="campSeg" onchange="previewSegment()">
+        ${segs.map(s => `<option value="${s.key}" ${opts.segment === s.key ? "selected" : ""}>${esc(s.label)} (${s.count})</option>`).join("")}
+      </select></div>
+    </div>
+    ${opts.ids ? `<input type="hidden" id="campIds" value="${esc(opts.ids)}">` : ""}
+    <div class="field"><label class="f">Message</label><textarea class="input" id="campMsg" style="min-height:110px">We've missed you! Come back this week and use code {{coupon_code}} for {{discount_text}} on your next purchase.</textarea>
+      <div class="hint">Placeholders: {{name}} {{shop}} {{coupon_code}} {{discount_text}} {{product}} {{days_since}} — the "Hi Jane, Shop here:" greeting is added automatically.</div></div>
+    <div class="row wrap" style="gap:8px">
+      <label class="row tiny" style="gap:6px"><input type="checkbox" id="campCoupon" checked> Attach a coupon</label>
+      <input class="input" id="campPct" style="width:80px" type="number" value="10" min="1" max="100">
+      <span class="tiny muted">% off</span>
+      <div class="grow"></div>
+      <span class="badge" id="campAudience">— recipients</span>
+    </div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button>
+     <button class="btn" onclick="previewCampaign()">Preview</button>
+     <button class="btn primary" onclick="sendCampaign()">Create &amp; send</button>`);
+  previewSegment();
+}
+async function previewSegment() {
+  const seg = (window.__segments || []).find(s => s.key === $("#campSeg").value) || {};
+  try {
+    const r = await api("/api/campaigns/preview", {method: "POST", body: {segment: seg.segment || {}}});
+    $("#campAudience").textContent = num(r.count || 0) + " recipients";
+  } catch (e) { $("#campAudience").textContent = "—"; }
+}
+async function previewCampaign() {
+  const r = await api("/api/templates/preview", {method: "POST", body: {body: $("#campMsg").value}});
+  openModal("Preview", `<div class="bubble out" style="max-width:100%">${linkify(r.rendered || r.text || $("#campMsg").value)}</div>
+    <div class="tiny muted mt12">Short links and opt-out wording are added automatically.</div>`,
+    `<button class="btn" onclick="buildCampaignAgain()">Back to editing</button>`);
+}
+function buildCampaignAgain() { closeModal(); buildCampaign(); }
+async function sendCampaign() {
+  const seg = (window.__segments || []).find(s => s.key === $("#campSeg").value) || {};
+  const msg = $("#campMsg").value;
+  const firstLine = (msg.split("\n")[0] || "A quick update").slice(0, 70);
+  const body = {name: $("#campName").value || "Campaign " + new Date().toLocaleDateString("en-GB"),
+                segment: seg.segment || {}, template_key: "broadcast", channel: "whatsapp", status: "draft"};
+  try {
+    const c = await api("/api/campaigns", {method: "POST", body});
+    const cid = c.campaign.id;
+    const r = await api(`/api/campaigns/${cid}/send`, {method: "POST", body: {
+      headline: firstLine, body: msg,
+      coupon_percent: $("#campCoupon").checked ? Number($("#campPct").value || 0) : 0}});
+    closeModal();
+    toast(`Campaign queued for ${num(r.queued || 0)} of ${num(r.recipients || 0)} customers`, "ok");
+    render("/segments");
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+/* ===================================================================== LOYALTY */
+page("/loyalty", {}, async () => {
+  const d = await api("/api/loyalty");
+  return shell(`
+  <div class="grid g4">
+    <div class="card kpi brand"><div class="label">Points outstanding</div><div class="value">${num(d.stats && d.stats.points_outstanding)}</div><div class="foot">across ${num(d.stats && d.stats.members)} members</div></div>
+    <div class="card kpi"><div class="label">Ready to redeem</div><div class="value">${num(d.stats && d.stats.ready_to_redeem)}</div><div class="foot">customers sitting on 5+ points</div></div>
+    <div class="card kpi"><div class="label">Loyalty rule</div><div class="value" style="font-size:15px;font-weight:650;line-height:1.4">${esc(d.rule || "1 point per visit")}</div><div class="foot">edit in Settings → Reminder rules</div></div>
+    <div class="card kpi"><div class="label">Loyalty status</div><div class="value" style="font-size:18px">${d.enabled ? "Active" : "Off"}</div>
+      <div class="foot"><a href="#/settings">${d.enabled ? "Change the rule" : "Turn it on in Settings"}</a></div></div>
+  </div>
+  <div class="grid g21 mt16">
+    <div class="card"><div class="hd"><h3>Top members</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Customer</th><th class="right">Points</th><th class="right">Visits</th><th class="right">Spend</th><th>Last visit</th></tr></thead><tbody>
+      ${(d.leaderboard || []).map(c => `<tr class="click" onclick="location.hash='#/customers/${c.id}'"><td><div class="row" style="gap:9px">${avatar(c.name, 26)}<b>${esc(c.name)}</b></div></td>
+        <td class="right"><b>${num(c.loyalty_points)}</b></td><td class="right">${num(c.visit_count)}</td><td class="right">${money(c.total_spent)}</td><td>${dt(c.last_purchase_at)}</td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">No loyalty members yet</div></td></tr>`}
+      </tbody></table></div></div>
+    <div class="card"><div class="hd"><h3>Recent activity</h3></div><div class="bd" style="padding:8px 16px">
+      ${(d.events || []).slice(0, 12).map(e => `<div class="recent-li"><div class="grow"><div class="nm">${esc(e.customer)}</div>
+        <div class="ss" style="text-transform:capitalize">${esc(e.reason)} · ${dt(e.created_at)}</div></div>
+        <b style="color:${e.points > 0 ? "var(--ok)" : "var(--bad)"}">${e.points > 0 ? "+" : ""}${num(e.points)}</b></div>`).join("") || `<div class="empty tiny">No activity yet</div>`}
+    </div></div>
+  </div>`);
+});
+
+/* ===================================================================== COUPONS */
+page("/coupons", {}, async () => {
+  const d = await api("/api/coupons");
+  const rows = d.rows || [];
+  return shell(`
+  <div class="grid g4">
+    <div class="card kpi"><div class="label">Active coupons</div><div class="value">${num(rows.filter(c => c.status === "active").length)}</div><div class="foot">ready to use</div></div>
+    <div class="card kpi"><div class="label">Redeemed</div><div class="value">${num(rows.filter(c => (c.used_count || 0) > 0).length)}</div><div class="foot">coupons that brought a sale</div></div>
+    <div class="card kpi"><div class="label">Discount offered</div><div class="value">${money(d.stats && d.stats.value_given)}</div><div class="foot">across issued coupons</div></div>
+    <div class="card kpi"><div class="label">Avg. discount</div><div class="value">${rows.length ? Math.round(rows.reduce((a, c) => a + (c.discount_value || 0), 0) / rows.length) : 0}%</div><div class="foot">across all coupons</div></div>
+  </div>
+  <div class="card mt16"><div class="hd"><h3>Coupons</h3><div class="grow"></div>
+    <button class="btn sm" onclick="redeemModal()">Redeem a code</button>
+    <button class="btn primary sm" onclick="couponModal()">＋ Create coupon</button></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>Code</th><th>Customer</th><th class="right">Discount</th><th>Status</th><th>Expires</th><th class="right"></th></tr></thead><tbody>
+    ${rows.map(c => `<tr><td class="mono"><b>${esc(c.code)}</b></td>
+      <td>${c.customer || c.customer_name ? esc(c.customer || c.customer_name) : `<span class="muted">any customer</span>`}</td>
+      <td class="right">${c.discount_type === "amount" ? money(c.discount_value) : (c.discount_value || 0) + "%"}</td>
+      <td><span class="badge ${c.status === "used" ? "ok" : c.status === "expired" ? "bad" : "brand"}">${esc(c.status)}</span></td>
+      <td>${datef(c.expires_on)}</td>
+      <td class="right">${c.status === "active" ? `<button class="btn sm" onclick="redeemCoupon('${esc(c.code)}')">Redeem</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="6"><div class="empty"><div class="big">✁</div>No coupons yet. Rebuy creates them automatically for win-backs.</div></td></tr>`}
+    </tbody></table></div></div>`);
+});
+function couponModal() {
+  openModal("Create a coupon", `
+    <div class="g2" style="gap:10px">
+      <div class="field"><label class="f">Discount %</label><input class="input" id="cpPct" type="number" value="10" min="1" max="100"></div>
+      <div class="field"><label class="f">Valid for (days)</label><input class="input" id="cpDays" type="number" value="14"></div>
+    </div>
+    <div class="field"><label class="f">Short code (optional)</label><input class="input" id="cpCode" placeholder="leave blank to generate one"></div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="createCoupon()">Create</button>`);
+}
+async function createCoupon() {
+  try {
+    const r = await api("/api/coupons", {method: "POST", body: {discount_type: "percent", discount_value: Number($("#cpPct").value), expires_on: daysFromNow(Number($("#cpDays").value)), code: $("#cpCode").value}});
+    closeModal(); toast("Coupon " + (r.code || "") + " created", "ok"); render("/coupons");
+  } catch (e) { toast(e.message, "bad"); }
+}
+function redeemModal() {
+  openModal("Redeem a coupon", `<div class="field"><label class="f">Coupon code</label><input class="input" id="rdCode" placeholder="e.g. REP00123"><div class="hint">Redeeming marks the coupon used — apply the discount at the till.</div></div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="redeemCoupon()">Redeem</button>`);
+}
+async function redeemCoupon(code) {
+  try {
+    const c = code || $("#rdCode").value;
+    const r = await api("/api/coupons/redeem", {method: "POST", body: {code: c}});
+    closeModal(); toast("Coupon " + c + " redeemed", "ok"); render("/coupons");
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+/* ===================================================================== REPORTS */
+page("/reports", {}, async () => {
+  const d = await api("/api/reports?days=" + S.days);
+  const f = d.funnel || {};
+  const steps = [["Reminders planned", f.scheduled], ["Messages sent", f.sent], ["Customers replied", f.replied], ["Converted to a sale", f.converted]];
+  const maxStep = Math.max(1, ...steps.map(s => s[1] || 0));
+  return shell(`
+  <div class="row mb12"><div class="chips">${[7, 30, 90, 365].map(x => `<span class="chip ${S.days === x ? "on" : ""}" onclick="S.days=${x};render('/reports')">last ${x} days</span>`).join("")}</div></div>
+  <div class="grid g4">
+    <div class="card kpi brand"><div class="label">Revenue recovered</div><div class="value">${money(d.kpis && d.kpis.revenue_recovered)}</div><div class="foot">attributed to reminders</div></div>
+    <div class="card kpi"><div class="label">Reply rate</div><div class="value">${pct(d.kpis && d.kpis.reply_rate)}</div><div class="foot">${num(d.kpis && d.kpis.replies)} replies</div></div>
+    <div class="card kpi"><div class="label">Conversion rate</div><div class="value">${pct(d.kpis && d.kpis.conversion_rate)}</div><div class="foot">reminder → purchase</div></div>
+    <div class="card kpi"><div class="label">Repeat rate</div><div class="value">${pct(d.kpis && d.kpis.repeat_rate)}</div><div class="foot">customers who came back</div></div>
+  </div>
+
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>Retention funnel</h3><div class="tiny muted">last ${S.days} days</div></div><div class="bd">
+      ${steps.map(s => `<div style="margin-bottom:12px"><div class="spread"><span>${esc(s[0])}</span><b>${num(s[1])}</b></div>
+        <div class="bar mt8"><i style="width:${Math.round(100 * (s[1] || 0) / maxStep)}%"></i></div></div>`).join("")}
+      <div class="tiny muted mt12">${d.insight || ""}</div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>By channel</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Channel</th><th class="right">Sent</th><th class="right">Delivered</th><th class="right">Failed</th><th class="right">Delivery rate</th></tr></thead><tbody>
+      ${(d.by_channel || []).map(c => `<tr><td style="text-transform:capitalize">${CHAN_ICON[c.channel] || ""} ${esc(c.channel)}</td>
+        <td class="right">${num(c.sent)}</td><td class="right">${num(c.delivered)}</td><td class="right">${num(c.failed)}</td><td class="right">${pct(c.sent ? 100 * c.delivered / c.sent : 0)}</td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">No messages yet</div></td></tr>`}
+      </tbody></table></div></div>
+  </div>
+
+  <div class="grid g2 mt16">
+    <div class="card"><div class="hd"><h3>Product reorders</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Product</th><th class="right">Reminders</th><th class="right">Revenue</th><th class="right">Converted</th><th class="right">Rate</th></tr></thead><tbody>
+      ${(d.by_product || []).map(p => `<tr><td>${esc(p.product_name)}</td><td class="right">${num(p.reminders)}</td><td class="right">${money(p.revenue)}</td>
+        <td class="right">${num(p.converted)}</td><td class="right">${p.reminders ? pct(100 * p.converted / p.reminders) : "—"}</td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">No data</div></td></tr>`}
+      </tbody></table></div></div>
+    <div class="card"><div class="hd"><h3>Cohorts — do they come back?</h3></div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Month</th><th class="right">Customers</th><th class="right">Revenue</th><th class="right">Avg / customer</th></tr></thead><tbody>
+      ${(d.cohorts || []).map(c => `<tr><td>${esc(c.month)}</td><td class="right">${num(c.customers)}</td><td class="right">${money(c.revenue)}</td>
+        <td class="right"><span class="badge">${num(c.customers) ? money(c.revenue / c.customers) : "—"} each</span></td></tr>`).join("") || `<tr><td colspan="4"><div class="empty">No cohorts yet</div></td></tr>`}
+      </tbody></table></div></div>
+  </div>
+
+  <div class="card mt16"><div class="hd"><h3>Goods vs services</h3></div>
+    <div class="scrollx"><table class="t"><thead><tr><th>Reminder kind</th><th class="right">Sent</th><th class="right">Converted</th><th class="right">Revenue</th><th class="right">Conversion</th></tr></thead><tbody>
+    ${(d.by_kind || []).map(k => `<tr><td><span class="badge ${k.kind === "service" ? "info" : ""}">${esc(k.kind)}</span></td>
+      <td class="right">${num(k.sent)}</td><td class="right">${num(k.converted)}</td><td class="right">${money(k.revenue)}</td>
+      <td class="right">${k.sent ? pct(100 * k.converted / k.sent) : "—"}</td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">No data</div></td></tr>`}
+    </tbody></table></div></div>`);
+});
+
+/* ===================================================================== IMPORT */
+let IMPORT_STATE = {tab: "file", preview: null};
+page("/import", {}, async () => {
+  const [jobs, receipts, shop] = await Promise.all([api("/api/import/jobs"), api("/api/receipts"), api("/api/shop")]);
+  const ch = shop.counts;
+  return shell(`
+  <div class="grid g21">
+    <div>
+      <div class="card"><div class="tabs" style="margin:0;padding:0 16px">
+        <div class="tab ${IMPORT_STATE.tab === "file" ? "on" : ""}" onclick="IMPORT_STATE.tab='file';render('/import')">📄 Spreadsheet / CSV</div>
+        <div class="tab ${IMPORT_STATE.tab === "receipt" ? "on" : ""}" onclick="IMPORT_STATE.tab='receipt';render('/import')">🧾 Receipt or order text</div>
+        <div class="tab ${IMPORT_STATE.tab === "jobs" ? "on" : ""}" onclick="IMPORT_STATE.tab='jobs';render('/import')">📚 History</div>
+      </div>
+      <div class="bd" style="border-top:1px solid var(--line)">
+      ${IMPORT_STATE.tab === "file" ? `
+        <div id="drop" style="border:2px dashed #d5d0ea;border-radius:14px;padding:32px 20px;text-align:center;background:#fbfaff;transition:.15s"
+             ondragover="event.preventDefault();this.style.borderColor='#5b3df5'" ondragleave="this.style.borderColor='#d5d0ea'" ondrop="dropFile(event)">
+          <div style="font-size:30px">⇪</div>
+          <div style="font-weight:650;margin-top:8px">Drop your sales file here</div>
+          <div class="tiny muted mt8">CSV or Excel (.xlsx). We auto-detect the columns — no mapping needed.<br>Receipt no, date, customer, phone, item, qty, price.</div>
+          <label class="btn primary mt12" style="display:inline-flex">Choose a file<input type="file" accept=".csv,.xlsx,.xlsm,text/csv" style="display:none" onchange="pickFile(this)"></label>
+          <div class="tiny muted mt8">If you are previewing inside app.arena.ai, use <b>“Use a generated sample file”</b> below — the sandboxed preview cannot open the system file picker. Everything else works in the preview.</div>
+          <button class="btn mt8" onclick="useSample()">Use a generated sample file</button>
+        </div>
+        <div class="tiny muted mt12">Supported headers include: <span class="mono">receipt_no / invoice / order, date, customer / name, phone / msisdn, item / product / description, qty / quantity, price / amount, total</span></div>
+        <div id="importPreview" class="mt12"></div>
+      ` : IMPORT_STATE.tab === "receipt" ? `
+        <div class="field"><label class="f">Paste your receipt, WhatsApp order or sales-book page</label>
+          <textarea class="input" id="recText" style="min-height:170px;font-family:var(--mono);font-size:12px">KAMPALA FRESH MART
+Receipt #: 88421
+Date: 2026-11-09
+Customer: Aisha Nabirye  0772 445 118
+
+Rice 2kg   x2   12,000
+Cooking oil 1L  x1  8,500
+Sugar 1kg  x3   4,500
+
+TOTAL: 42,000 UGX
+Paid by mobile money</textarea>
+          <div class="hint">We read the customer, date and line items and create the customer, the sale and the restock reminders.</div>
+          <div class="row mt8"><button class="btn" onclick="pasteSample()">Paste another sample</button><div class="grow"></div>
+            <button class="btn primary" onclick="importText()">Read &amp; import →</button></div></div>
+      ` : `
+        <div class="scrollx"><table class="t"><thead><tr><th>When</th><th>File</th><th>Type</th><th class="right">Rows</th><th class="right">Customers</th><th class="right">Sales</th><th>Status</th></tr></thead><tbody>
+          ${(jobs.rows || []).map(j => `<tr><td class="nowrap">${dt(j.created_at)}</td><td>${esc(j.filename || j.kind || "—")}</td>
+            <td><span class="badge">${esc(j.kind || "")}</span></td><td class="right">${num(j.rows_total)}</td>
+            <td class="right">${num(j.rows_ok)}</td><td class="right">${num(j.rows_failed)}</td>
+            <td><span class="badge ${j.status === "done" ? "ok" : j.status === "failed" ? "bad" : ""}">${esc(j.status)}</span></td></tr>`).join("") || `<tr><td colspan="7"><div class="empty">No imports yet</div></td></tr>`}
+        </tbody></table></div>
+      `}
+      </div></div>
+    </div>
+    <div>
+      <div class="card"><div class="hd"><h3>Your data today</h3></div><div class="bd">
+        <div class="statline"><span class="muted">Customers</span><b>${num(ch.customers)}</b></div>
+        <div class="statline"><span class="muted">Products &amp; services</span><b>${num(ch.products)}</b></div>
+        <div class="statline"><span class="muted">Sales recorded</span><b>${num(ch.sales)}</b></div>
+        <div class="statline"><span class="muted">Reminders waiting</span><b>${num(ch.reminders_due)}</b></div>
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>Receipts to review</h3></div><div class="bd" style="padding:8px 16px">
+        ${(receipts.rows || []).slice(0, 6).map(r => `<div class="recent-li"><div class="grow"><div class="nm">${esc(r.filename || r.source || "Receipt #" + r.id)}</div>
+          <div class="ss">${esc(r.merchant || "")} · ${dt(r.created_at)}</div></div>
+          <span class="badge ${r.parse_status === "confirmed" ? "ok" : "warn"}">${esc(r.parse_status)}</span></div>`).join("") || `<div class="empty tiny">No receipts uploaded</div>`}
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>What gets imported</h3></div><div class="bd tiny muted">
+        Each row becomes a customer (deduplicated by phone), a sale, and one line item per product — each line gets its own restock cycle.
+        Duplicate receipts are skipped, so you can re-upload safely.
+      </div></div>
+    </div>
+  </div>`);
+});
+
+function pickFile(inp) {
+  const f = inp.files[0];
+  if (!f) return;
+  uploadFile(f);
+}
+function dropFile(ev) {
+  ev.preventDefault();
+  $("#drop").style.borderColor = "#d5d0ea";
+  const f = ev.dataTransfer.files[0];
+  if (f) uploadFile(f);
+}
+function readAsDataURL(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+}
+async function uploadFile(file) {
+  const box = $("#importPreview");
+  box.innerHTML = `<div class="empty">Reading ${esc(file.name)}…</div>`;
+  try {
+    const data = await readAsDataURL(file);
+    const prev = await api("/api/import/preview", {method: "POST", body: {filename: file.name, data}});
+    box.innerHTML = `<div class="card"><div class="hd"><h3>Found ${num(prev.rows_found)} rows in ${esc(file.name)}</h3></div><div class="bd">
+      <div class="row wrap tiny mb12" style="gap:8px">${Object.entries(prev.mapping || {}).map(([k, v]) => `<span class="badge info">${esc((prev.headers || [])[v] || v)} → ${esc(k)}</span>`).join("")}</div>
+      <div class="scrollx"><table class="t"><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Phone</th><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>
+        ${(prev.sample || []).map(r => `<tr><td class="mono">${esc(r.receipt_no || "—")}</td><td>${esc(r.date || "")}</td><td>${esc(r.name || "")}</td>
+          <td class="tiny">${esc(r.phone || "")}</td><td>${esc(r.product || "")}</td><td>${esc(r.qty || "")}</td><td>${esc(r.line_total || "")}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="row mt12"><span class="badge">${num(prev.groups)} receipts detected</span><div class="grow"></div>
+        <button class="btn primary" onclick="commitImport('${esc(file.name)}', this)">Import ${num(prev.rows_found)} rows →</button></div>
+    </div></div>`;
+    window.__pendingFile = {data, name: file.name};
+  } catch (e) { box.innerHTML = `<div class="card"><div class="bd"><b>Could not read that file.</b><div class="tiny muted mt8">${esc(e.message)}</div></div></div>`; }
+}
+async function commitImport(name, btn) {
+  const f = window.__pendingFile;
+  if (!f) return;
+  btn.disabled = true; btn.textContent = "Importing…";
+  try {
+    const r = await api("/api/import/file", {method: "POST", body: {filename: f.name, data: f.data}});
+    toast(`Imported ${num((r.report && r.report.sales) || 0)} sales · ${num((r.report && r.report.customers) || 0)} customers · ${num((r.report && r.report.reminders) || 0)} reminders`, "ok");
+    render("/import");
+  } catch (e) { toast(e.message, "bad"); btn.disabled = false; btn.textContent = "Try again"; }
+}
+function sampleCsv() {
+  const today = new Date();
+  const d = n => new Date(today - n * 86400000).toISOString().slice(0, 10);
+  const who = [["Aisha Nabirye", "+256772445118", "Ntinda"], ["Brian Okello", "+256701882003", "Kireka"],
+               ["Grace Atim", "+256782119944", "Bugolobi"], ["Moses Kaggwa", "+256703447812", "Nakawa"],
+               ["Sandra Nansubuga", "+256775990210", "Muyenga"], ["Peter Wanyama", "+256787220145", "Kawempe"]];
+  const items = [["Rice 2kg", "Grains & Flour", 12000, 1], ["Cooking oil 1L", "Cooking Oil", 8500, 1],
+                 ["Sugar 1kg", "Sugar", 4500, 2], ["Maize flour 2kg", "Grains & Flour", 6000, 1],
+                 ["Milk 500ml", "Dairy & Eggs", 2500, 4], ["Soap bar", "Personal Care", 3500, 1]];
+  const rows = [["receipt_no", "date", "customer", "phone", "area", "item", "category", "qty", "price", "total", "payment"]];
+  let n = 4000;
+  for (let v = 0; v < 6; v++) {
+    for (let k = 0; k < 2 + (v % 3); k++) {
+      const [name, phone, area] = who[v];
+      const [item, cat, price] = items[(v + k) % items.length];
+      const qty = 1 + ((v + k) % 3);
+      n++;
+      rows.push(["R" + n, d(k * 12 + v * 2), name, phone, area, item, cat, qty, price, price * qty, k % 2 ? "cash" : "mobile money"]);
+    }
+  }
+  return rows.map(r => r.join(",")).join("\n");
+}
+async function useSample() {
+  try {
+    const data = "data:text/csv;base64," + btoa(sampleCsv());
+    const r = {filename: "sample_sales.csv"};
+    const prev = await api("/api/import/preview", {method: "POST", body: {filename: r.filename, data}});
+    const box = $("#importPreview");
+    box.innerHTML = `<div class="card"><div class="hd"><h3>Sample file — ${num(prev.rows_found)} rows</h3></div><div class="bd">
+      <div class="scrollx"><table class="t"><thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Phone</th><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>
+      ${(prev.sample || []).map(x => `<tr><td class="mono">${esc(x.receipt_no || "")}</td><td>${esc(x.date || "")}</td><td>${esc(x.name || "")}</td><td class="tiny">${esc(x.phone || "")}</td><td>${esc(x.product || "")}</td><td>${esc(x.qty || "")}</td><td>${esc(x.line_total || "")}</td></tr>`).join("")}
+      </tbody></table></div><div class="row mt12"><div class="grow"></div><button class="btn primary" onclick="commitImport('sample', this)">Import sample →</button></div></div></div>`;
+    window.__pendingFile = {data, name: r.filename};
+  } catch (e) { toast(e.message, "bad"); }
+}
+function pasteSample() {
+  $("#recText").value = `NAKATO HAIR LOUNGE
+Receipt: 5521
+Date: 2026-11-08
+Client: Brenda Atim  0704 223 991
+
+Wash & blow dry  x1  25,000
+Deep conditioning treatment  x1  40,000
+TOTAL: 65,000
+Paid cash. Next appointment in 4 weeks.`;
+}
+async function importText() {
+  const text = $("#recText").value;
+  try {
+    const r = await api("/api/import/text", {method: "POST", body: {text}});
+    const rep = r.report || {};
+    toast(`Imported: ${num(rep.sales || 0)} sale · ${num(rep.customers || 0)} customer · ${num(rep.reminders || 0)} reminders`, "ok");
+    render("/import");
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+/* ===================================================================== SETTINGS */
+page("/settings", {}, async () => {
+  const [shop, ch, tpl] = await Promise.all([api("/api/shop"), api("/api/settings/channels"), api("/api/templates")]);
+  const s = shop.shop;
+  const channels = ch.channels || [];
+  S.tpl = tpl.rows || [];
+  return shell(`
+  <div class="grid g21">
+    <div>
+      <div class="card"><div class="hd"><h3>Shop profile</h3></div><div class="bd">
+        <form onsubmit="saveShop(event)">
+        <div class="g2" style="gap:10px">
+          <div class="field"><label class="f">Shop name</label><input class="input" name="name" value="${esc(s.name)}"></div>
+          <div class="field"><label class="f">Sender name (shown to customers)</label><input class="input" name="sender_name" value="${esc(s.sender_name || "")}"></div>
+        </div>
+        <div class="g3" style="gap:10px">
+          <div class="field"><label class="f">Owner</label><input class="input" name="owner_name" value="${esc(s.owner_name || "")}"></div>
+          <div class="field"><label class="f">Owner email</label><input class="input" name="owner_email" value="${esc(s.owner_email || "")}"></div>
+          <div class="field"><label class="f">WhatsApp number</label><input class="input" name="whatsapp_number" value="${esc(s.whatsapp_number || "")}"></div>
+        </div>
+        <div class="g3" style="gap:10px">
+          <div class="field"><label class="f">Business type</label><select class="input" name="sector">${["Supermarket","Grocery & Duka","LPG & Water","Salon & Spa","Pharmacy","Auto Garage","Bakery","Hardware","Agrovet","Boutique","Laundry","Gym & Fitness","Electronics","Pet Shop","Restaurant","Clinic","Stationery","Retail"].map(x => `<option ${s.sector === x ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+          <div class="field"><label class="f">City</label><input class="input" name="city" value="${esc(s.city || "")}"></div>
+          <div class="field"><label class="f">Currency</label><input class="input" name="currency" value="${esc(s.currency || "UGX")}"></div>
+        </div>
+        <button class="btn primary">Save profile</button>
+        </form>
+      </div></div>
+
+      <div class="card mt16"><div class="hd"><h3>Reminder rules</h3></div><div class="bd">
+        <div class="g2" style="gap:10px">
+          <div class="field"><label class="f">Send reminders before the item runs out (days)</label><input class="input" id="leadDays" type="number" value="${s.reminder_lead_days}"></div>
+          <div class="field"><label class="f">Max follow-ups per purchase</label><input class="input" id="maxFollow" type="number" value="${s.max_followups}"></div>
+          <div class="field"><label class="f">Max messages per customer per month</label><input class="input" id="maxMsgs" type="number" value="${s.max_msgs_per_customer_month}"></div>
+          <div class="field"><label class="f">Quiet hours (no messages)</label><div class="row"><input class="input" id="quietStart" value="${esc(s.quiet_start)}"><span class="tiny muted">to</span><input class="input" id="quietEnd" value="${esc(s.quiet_end)}"></div></div>
+        </div>
+        <div class="row wrap">
+          <label class="row" style="gap:8px;font-size:13px"><button class="switch ${s.auto_reminders ? "on" : ""}" id="autoSwitch" onclick="event.preventDefault();this.classList.toggle('on')"></button> Auto-send reminders</label>
+          <div class="grow"></div>
+          <label class="row" style="gap:8px;font-size:13px"><button class="switch ${s.loyalty_enabled ? "on" : ""}" id="loyaltySwitch" onclick="event.preventDefault();this.classList.toggle('on')"></button> Loyalty rewards</label>
+        </div>
+        <div class="row mt12"><div class="grow"></div><button class="btn primary" onclick="saveRules()">Save rules</button></div>
+      </div></div>
+
+      <div class="card mt16"><div class="hd"><h3>Message templates</h3><div class="grow"></div><div class="tiny muted">Shop versions override platform defaults</div></div>
+        <div class="bd" style="padding:8px 16px">
+          ${(tpl.rows || []).map(t => `<div class="recent-li">
+            <div class="grow"><div class="nm">${esc(t.label || t.key)} <span class="badge">${esc(t.channel)}</span>${t.shop_id ? `<span class="badge brand">custom</span>` : ""}</div>
+            <div class="ss mono" style="white-space:normal">${esc((t.body || "").slice(0, 110))}${(t.body || "").length > 110 ? "…" : ""}</div></div>
+            <button class="btn sm" onclick='editTemplate(${JSON.stringify({key: t.key, channel: t.channel, body: t.body, label: t.key})})'>Edit</button></div>`).join("")}
+        </div></div>
+    </div>
+
+    <div>
+      <div class="card"><div class="hd"><h3>Channels</h3></div><div class="bd">
+        ${channels.map(c => `<div class="recent-li">
+          <div class="avatar" style="background:${c.channel === "whatsapp" ? "#0d9f6e" : c.channel === "sms" ? "#2563eb" : "#b7791f"}">${c.channel === "whatsapp" ? "🟢" : c.channel === "sms" ? "📱" : "✉"}</div>
+          <div class="grow"><div class="nm" style="text-transform:capitalize">${esc(c.channel)}</div>
+          <div class="ss">${esc(c.driver === "sandbox" ? "Sandbox (demo) — no real messages" : c.driver + " · live")}</div></div>
+          <span class="badge ${c.driver === "sandbox" ? "warn" : "ok"}">${esc(c.driver)}</span>
+        </div>`).join("")}
+        <button class="btn mt12" style="width:100%;justify-content:center" onclick="channelModal()">⚙ Configure providers</button>
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>Test your channels</h3></div><div class="bd">
+        <div class="field"><label class="f">Send a test message to</label><input class="input" id="testTo" placeholder="+256 700 000 000"></div>
+        <div class="field"><label class="f">Channel</label><select class="input" id="testCh"><option>whatsapp</option><option>sms</option><option>email</option></select></div>
+        <button class="btn" style="width:100%;justify-content:center" onclick="sendTest()">Send test</button>
+      </div></div>
+      <div class="card mt16"><div class="hd"><h3>Plan &amp; usage</h3></div><div class="bd">
+        <div class="statline"><span class="muted">Plan</span><b>${esc(PLAN_NAMES[s.plan] || s.plan)}</b></div>
+        <div class="statline"><span class="muted">Monthly price</span><b>${money(s.monthly_price)}</b></div>
+        <div class="statline"><span class="muted">Status</span><span class="badge ${s.status === "active" ? "ok" : "warn"}">${esc(s.status)}</span></div>
+        ${s.trial_ends_at ? `<div class="statline"><span class="muted">Trial ends</span><b>${datef(s.trial_ends_at)}</b></div>` : ""}
+      </div></div>
+    </div>
+  </div>`);
+});
+
+async function saveShop(ev) {
+  ev.preventDefault();
+  const body = {};
+  for (const el of ev.target.elements) if (el.name) body[el.name] = el.value;
+  try { const r = await api("/api/shop", {method: "PATCH", body}); S.shop = r.shop; toast("Profile saved", "ok"); }
+  catch (e) { toast(e.message, "bad"); }
+}
+async function saveRules() {
+  const body = {reminder_lead_days: Number($("#leadDays").value), max_followups: Number($("#maxFollow").value),
+                max_msgs_per_customer_month: Number($("#maxMsgs").value),
+                quiet_start: $("#quietStart").value, quiet_end: $("#quietEnd").value,
+                auto_reminders: $("#autoSwitch").classList.contains("on") ? 1 : 0,
+                loyalty_enabled: $("#loyaltySwitch").classList.contains("on") ? 1 : 0};
+  try { const r = await api("/api/shop", {method: "PATCH", body}); S.shop = r.shop; toast("Rules saved", "ok"); render("/settings"); }
+  catch (e) { toast(e.message, "bad"); }
+}
+async function channelModal() {
+  const d = await api("/api/settings/channels");
+  openModal("Configure messaging providers", `
+    <div class="tiny muted mb12">Shop credentials take priority over platform credentials, which take priority over environment variables. Leave blank to keep using the sandbox.</div>
+    <details class="adv" open><summary>🟢 WhatsApp — Meta Cloud API</summary><div class="inner">
+      <div class="field"><label class="f">Phone number ID</label><input class="input" id="waPhoneId" placeholder="e.g. 1234567890"></div>
+      <div class="field"><label class="f">Access token</label><input class="input" id="waToken" type="password" placeholder="EAAG…"></div>
+      <div class="field"><label class="f">API version</label><input class="input" id="waVer" placeholder="v21.0"></div>
+      <label class="row tiny" style="gap:6px"><input type="checkbox" id="waEnable" checked> Use WhatsApp for reminders</label>
+    </div></details>
+    <details class="adv"><summary>📱 SMS — Twilio</summary><div class="inner">
+      <div class="field"><label class="f">Account SID</label><input class="input" id="smsSid" placeholder="AC…"></div>
+      <div class="field"><label class="f">Auth token</label><input class="input" id="smsToken" type="password"></div>
+      <div class="field"><label class="f">From number</label><input class="input" id="smsFrom" placeholder="+1…"></div>
+    </div></details>
+    <details class="adv"><summary>✉️ Email — SMTP</summary><div class="inner">
+      <div class="g2" style="gap:10px">
+        <div class="field"><label class="f">SMTP host</label><input class="input" id="emHost" placeholder="smtp.gmail.com"></div>
+        <div class="field"><label class="f">Port</label><input class="input" id="emPort" placeholder="587"></div>
+      </div>
+      <div class="g2" style="gap:10px">
+        <div class="field"><label class="f">Username</label><input class="input" id="emUser"></div>
+        <div class="field"><label class="f">Password</label><input class="input" id="emPass" type="password"></div>
+      </div>
+      <div class="g2" style="gap:10px">
+        <div class="field"><label class="f">From address</label><input class="input" id="emFrom" placeholder="shop@yourdomain.com"></div>
+        <div class="field"><label class="f">Security</label><select class="input" id="emSec"><option>starttls</option><option>ssl</option></select></div>
+      </div>
+    </div></details>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveChannels()">Save providers</button>`, true);
+}
+async function saveChannels() {
+  const wa = {phone_number_id: $("#waPhoneId").value.trim(), token: $("#waToken").value.trim(), api_version: $("#waVer").value.trim() || "v21.0"};
+  const sms = {sid: $("#smsSid").value.trim(), token: $("#smsToken").value.trim(), from_number: $("#smsFrom").value.trim()};
+  const email = {host: $("#emHost").value.trim(), port: $("#emPort").value.trim() || "587", user: $("#emUser").value.trim(),
+                 password: $("#emPass").value, from_address: $("#emFrom").value.trim(), security: $("#emSec").value};
+  const jobs = [];
+  if (wa.phone_number_id && wa.token) jobs.push({channel: "whatsapp", driver: "meta", config: wa, enabled: $("#waEnable").checked});
+  if (sms.sid && sms.token && sms.from_number) jobs.push({channel: "sms", driver: "twilio", config: sms, enabled: true});
+  if (email.host && email.user) jobs.push({channel: "email", driver: "smtp", config: email, enabled: true});
+  if (!jobs.length) { toast("Fill in the fields for at least one channel", "bad"); return; }
+  try {
+    for (const j of jobs) await api("/api/settings/channels", {method: "POST", body: j});
+    closeModal(); toast("Providers saved — Rebuy will use them on the next send", "ok"); render("/settings");
+  } catch (e) { toast(e.message, "bad"); }
+}
+async function sendTest() {
+  try {
+    const r = await api("/api/settings/test-message", {method: "POST", body: {to: $("#testTo").value, channel: $("#testCh").value}});
+    toast(r.ok ? "Test sent via " + (r.driver || "sandbox") : "Test failed: " + (r.error || ""), r.ok ? "ok" : "bad");
+  } catch (e) { toast(e.message, "bad"); }
+}
+function editTemplate(t) {
+  openModal("Edit template — " + (t.label || t.key), `
+    <div class="field"><label class="f">Channel</label><input class="input" value="${esc(t.channel)}" disabled></div>
+    <div class="field"><label class="f">Message body</label><textarea class="input" id="tplBody" style="min-height:140px">${esc(t.body || "")}</textarea>
+      <div class="hint">Placeholders: {{name}} {{shop}} {{product}} {{last_item}} {{days_since}} {{coupon}} {{qty}} {{cycle}}</div></div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick='saveTemplate("${esc(t.key)}","${esc(t.channel)}")'>Save template</button>`);
+}
+async function saveTemplate(key, channel) {
+  try {
+    await api("/api/templates", {method: "POST", body: {key, channel, body: $("#tplBody").value, label: key}});
+    closeModal(); toast("Template saved", "ok"); render("/settings");
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+/* ===================================================================== HELP */
+function showHelp() {
+  openModal("How Rebuy works", `
+    <div class="timeline">
+      <div class="tl"><div class="tt">1. Capture every sale</div><div class="ss">Type it in, import a CSV/Excel file, or paste a receipt. Every line item gets a restock clock.</div></div>
+      <div class="tl"><div class="tt">2. We time the next purchase</div><div class="ss">Rice 2kg ≈ 21 days. Milk ≈ 5. Haircut ≈ 28. Car service ≈ 90. You can override any product's cycle.</div></div>
+      <div class="tl"><div class="tt">3. WhatsApp message goes out</div><div class="ss">A few days before it runs out, the customer gets a friendly message with a one-word reply to reorder.</div></div>
+      <div class="tl"><div class="tt">4. Replies land in your inbox</div><div class="ss">Orders, snoozes, opt-outs — all detected automatically and reflected in the customer record.</div></div>
+      <div class="tl"><div class="tt">5. You see the money</div><div class="ss">Conversions within 21 days are attributed, so you know exactly what Rebuy recovered.</div></div>
+    </div>
+    <div class="hr"></div>
+    <div class="tiny muted">Loyalty points, birthday messages, win-back coupons and campaigns all run on the same engine. Everything is scoped per shop, so the platform scales to thousands of shops.</div>`,
+    `<button class="btn primary" onclick="closeModal()">Got it</button>`, true);
+}
+
+function exportCsv(path, name) {
+  api(path).then(d => {
+    const rows = d.rows || [];
+    if (!rows.length) { toast("Nothing to export", "bad"); return; }
+    const cols = Object.keys(rows[0]);
+    const csv = [cols.join(",")].concat(rows.map(r => cols.map(c => {
+      const v = r[c] == null ? "" : String(r[c]);
+      return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    }).join(","))).join("\n");
+    const blob = new Blob([csv], {type: "text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name + "_" + todayStr() + ".csv"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  }).catch(e => toast(e.message, "bad"));
+}
+
+/* ===================================================================== boot */
+window.addEventListener("DOMContentLoaded", boot);
+if (document.readyState !== "loading") boot();
+</script>
+</body>
+</html>
