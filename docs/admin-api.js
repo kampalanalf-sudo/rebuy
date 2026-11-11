@@ -34,10 +34,10 @@
     const p = path.replace(/\/+$/, "") || "/";
     const days = url.searchParams.get("days") || "30";
     if (p === "/api/auth/me") {
-      return {authenticated: true, user: {id: 0, name: "Demo Admin", email: "admin@rebuy.app",
-        role: "admin", shop_id: null}, shop: null};
+      return {authenticated: true, user: {id: 0, name: "Demo Admin", email: "admin@rebuy.ug",
+        role: "admin", shop_id: null}, shop: null, google_enabled: false, signup_open: false, demo: true};
     }
-    if (p === "/api/auth/login") return {ok: true, user: {id: 0, name: "Demo Admin", email: "admin@rebuy.app", role: "admin"}};
+    if (p === "/api/auth/login") return {ok: true, user: {id: 0, name: "Demo Admin", email: "admin@rebuy.ug", role: "admin"}};
     if (p === "/api/admin/overview") return snap.overview;
     if (p === "/api/admin/revenue") return snap.revenue;
     if (p === "/api/admin/shops") {

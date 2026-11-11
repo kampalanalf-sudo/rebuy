@@ -193,8 +193,49 @@ def serve_file(path: str, accept_encoding: str = "") -> tuple[int, dict, bytes] 
                  "cache-control": "no-cache" if ext == ".html" else "public, max-age=300"}, data
 
 
+MAX_BODY_BYTES = int(os.environ.get("REBUY_MAX_BODY", str(8 * 1024 * 1024)))
+ALLOWED_HOSTS = [h.strip().lower() for h in os.environ.get("REBUY_ALLOWED_HOSTS", "").split(",") if h.strip()]
+
+
+def _cross_origin(headers: dict) -> bool:
+    """Reject state-changing requests that a browser marked as coming from
+    another site. Same-origin form posts and fetch() calls send neither header
+    or send a matching Origin."""
+    site = (headers.get("sec-fetch-site") or "").lower()
+    if site and site not in ("same-origin", "none"):
+        return True
+    origin = headers.get("origin") or ""
+    if not origin:
+        return False
+    allowed = set(ALLOWED_HOSTS)
+    try:
+        host = urllib.parse.urlparse(origin).netloc.lower()
+    except ValueError:
+        return True
+    if allowed:
+        return host not in allowed
+    server_host = (headers.get("host") or "").lower()
+    return bool(server_host) and host != server_host
+
+
+CSP = os.environ.get("REBUY_CSP") or (
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+    "script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self'; "
+    "base-uri 'self'; form-action 'self'"
+)
+
+SECURITY_HEADERS = {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "SAMEORIGIN",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "geolocation=(), microphone=(), camera=()",
+    "x-xss-protection": "0",
+}
+
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Rebuy/1.0"
+    server_version = "Rebuy"
+    sys_version = ""
     protocol_version = "HTTP/1.1"
 
     def _headers_dict(self) -> dict:
@@ -202,21 +243,31 @@ class Handler(BaseHTTPRequestHandler):
 
     def _run(self, method: str):
         length = int(self.headers.get("content-length") or 0)
+        if length > MAX_BODY_BYTES:
+            self._respond(413, {"content-type": "application/json"}, b'{"error":"payload too large"}')
+            return
         raw = self.rfile.read(length) if length else b""
         if method == "OPTIONS":
-            self._respond(204, {"access-control-allow-origin": "*", "access-control-allow-headers": "*",
-                                "access-control-allow-methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
-                                "content-length": "0"}, b"")
+            # same-origin only: there is no legitimate cross-site API consumer
+            self._respond(204, {"allow": "GET,POST,PATCH,PUT,DELETE,OPTIONS", "content-length": "0"}, b"")
             return
         hdrs_in = self._headers_dict()
+        if method not in ("GET", "HEAD") and _cross_origin(hdrs_in):
+            self._respond(403, {"content-type": "application/json"},
+                          b'{"error":"cross-site request blocked","code":"csrf"}')
+            return
         status, hdrs, body = dispatch(method, self.path, hdrs_in, raw)
         self._respond(status, hdrs, body)
 
     def _respond(self, status: int, hdrs: dict, body: bytes):
         self.send_response(status)
-        for k, v in hdrs.items():
+        merged = dict(SECURITY_HEADERS)
+        merged.update({k.lower(): v for k, v in hdrs.items()})
+        if merged.get("content-type", "").startswith("text/html"):
+            merged.setdefault("content-security-policy", CSP)
+        for k, v in merged.items():
             self.send_header(k, str(v))
-        if "content-length" not in {k.lower() for k in hdrs}:
+        if "content-length" not in {k.lower() for k in merged}:
             self.send_header("content-length", str(len(body)))
         self.end_headers()
         if body and self.command != "HEAD":

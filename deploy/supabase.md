@@ -2,44 +2,64 @@
 
 Project: **rebuy** (ref `amvkdevvjxbjnsrozobr`, region eu-central-1, Postgres 17.11)
 
-Connection string (session pooler — use this one):
+## Connection string
 
-```
-postgresql://postgres.amvkdevvjxbjnsrozobr:Rb7Kq2mZx9Tf4Ls8Wn3V@aws-1-eu-central-1.pooler.supabase.com:5432/postgres
+Find it in the Supabase dashboard → **Project Settings → Database → Connection
+string → URI**. Use the **session pooler** (port 5432): the direct host
+`db.<ref>.supabase.co` is IPv6-only, the pooler is reachable over IPv4.
+
+```bash
+# .env — never committed
+REBUY_DATABASE_URL="postgresql://postgres.<ref>:<DB_PASSWORD>@aws-1-eu-central-1.pooler.supabase.com:5432/postgres"
 ```
 
-The direct host `db.amvkdevvjxbjnsrozobr.supabase.co` is IPv6-only; the pooler
-is reachable over IPv4 from anywhere.
+The database password is not recorded anywhere in this repository. It lives in
+the platform's secret store (Vercel → Settings → Environment Variables) and in
+your password manager.
+
+> **If a password has ever been pasted into a chat, an issue, or a commit, treat
+> it as compromised.** Rotate it in Project Settings → Database → Reset database
+> password, then update `REBUY_DATABASE_URL` in every environment. `git log -S`
+> will tell you whether it was committed.
 
 ## What is deployed
 
 | Item | State |
 |---|---|
-| Schema (19 tables, 24 indexes, 3 compat functions) | created in `public` |
-| Demo fleet | 121 shops, 6,095 customers, 17,763 sales, 39,223 line items, 39,205 reminders, 36,837 messages, 4,528 coupons |
-| Database size | ~70 MB |
-| App server | `REBUY_DATABASE_URL=<above> python3 serve.py` — shop SPA at `/`, admin at `/admin` |
+| Schema (22 tables, 26 indexes, 3 compat functions) | created in `public` |
+| Demo fleet | opt-in only — see `REBUY_SEED_DEMO` below |
+| App server | `REBUY_DATABASE_URL=... python3 serve.py` — shop SPA at `/`, admin at `/admin` |
 
-## Load / reload the data
+## Load the schema
 
 ```bash
-export REBUY_DATABASE_URL="postgresql://postgres.amvkdevvjxbjnsrozobr:Rb7Kq2mZx9Tf4Ls8Wn3V@aws-1-eu-central-1.pooler.supabase.com:5432/postgres"
-python3 scripts/load_supabase.py --shops 120 --wipe
+export REBUY_DATABASE_URL="postgresql://..."      # from your secret store
+python3 scripts/load_supabase.py --schema-only
 ```
 
-`--wipe` truncates `public` tables and reseeds; `fix_sequences()` then moves
-every `BIGSERIAL` past the seeded ids so app inserts do not collide.
+To load a **demo** fleet into a throwaway project:
 
-## Logins
+```bash
+REBUY_SEED_DEMO=1 python3 scripts/load_supabase.py --shops 120 --wipe
+```
 
-* Shop owner — `owner@kampalafresh.ug` / `Shop1234!`
-* Platform admin — `admin@rebuy.app` / `Admin1234!`
+`--wipe` truncates the `public` tables and reseeds; `fix_sequences()` then moves
+every `BIGSERIAL` past the seeded ids so app inserts do not collide. Demo users
+are created on `@example.com` addresses with **random** passwords — they cannot
+be signed into.
 
-## Rotating the password
+## Accounts
 
-Supabase → Project Settings → Database → Reset database password, then update
-`REBUY_DATABASE_URL` wherever the app runs. Nothing is stored in the database
-that depends on the password.
+There are no seeded credentials. Accounts are created one of three ways:
+
+1. **Google sign-in** — anyone whose email is in `REBUY_ALLOWED_EMAILS` (or
+   anyone at all, if that variable is unset) signs in and gets an account.
+2. **Self-serve signup** — only when `REBUY_ALLOW_SIGNUP=1`.
+3. **Platform admin** — the first account whose email is listed in
+   `REBUY_ADMIN_EMAILS` is promoted to `role='admin'` on sign-in.
+
+Set `REBUY_ADMIN_EMAILS=you@yourcompany.ug` before the first production login,
+otherwise nobody can reach `/admin`.
 
 ## Why the app is not "hosted by Supabase"
 
@@ -54,6 +74,6 @@ long-lived Python HTTP server. So the split is:
 
 ## Verified
 
-All 27 shop + admin API endpoints return 200 against Supabase; login, signup
-(shop 121), sale creation, campaign send, reports and the admin cockpit read
-real data from Postgres.
+Shop and admin API endpoints return 200 against Supabase; login, signup, sale
+creation, campaign send, reports and the admin cockpit read real data from
+Postgres.

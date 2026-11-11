@@ -28,10 +28,17 @@ python3 scripts/build_payload.py "${ARGS[@]}"
 cat <<'TXT'
 
 Environment variables for the Vercel project (Settings -> Environment Variables):
+  REBUY_ENV=production      turns on strict config checks, Secure cookies, closed signup
+  REBUY_SECRET_KEY=...      REQUIRED in production; 32+ chars, from a password manager
+  REBUY_PUBLIC_URL=...      https URL of the deployment (OAuth redirect base)
+  REBUY_DATABASE_URL=...    Postgres/Supabase DSN (omit to use SQLite on /tmp)
+  REBUY_GOOGLE_CLIENT_ID / REBUY_GOOGLE_CLIENT_SECRET    Google sign-in
+  REBUY_ADMIN_EMAILS=...    comma list promoted to platform admin on first sign-in
+  REBUY_ALLOWED_EMAILS=...  optional invite wall for a private beta
   REBUY_WORKER=0            no background thread on serverless (Vercel Cron drives the queue)
-  REBUY_SEED_SHOPS=120      demo fleet size created on first boot
   REBUY_DB=/tmp/rebuy.db    SQLite path; /tmp is ephemeral on Vercel (see README)
-  CRON_SECRET=<random>      protects /api/cron/tick
+  CRON_SECRET               random 40-char value, generated per deployment:
+                            python3 -c "import secrets;print(secrets.token_urlsafe(40))"
   WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_VERIFY_TOKEN / WHATSAPP_APP_SECRET
   TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM
   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASSWORD / SMTP_FROM / SMTP_SECURITY

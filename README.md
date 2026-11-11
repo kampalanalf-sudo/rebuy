@@ -20,16 +20,66 @@ cd rebuy
 python3 serve.py --port 8000        # stdlib only; no pip install needed
 ```
 
-First boot creates the schema and seeds a deterministic demo fleet
-(`REBUY_SEED_SHOPS`, default 120 shops) into `data/rebuy.db`.
+### Configuration
 
-| Login | Email | Password |
-|---|---|---|
-| Shop owner (supermarket) | `owner@kampalafresh.ug` | `Shop1234!` |
-| Shop owner (salon) | `owner@nakatohair.ug` | `Shop1234!` |
-| Platform admin | `admin@rebuy.app` | `Admin1234!` |
+Copy `.env.example` to `.env` and fill it in. Nothing secret is committed.
 
-Shops 1–24 also have owner logins (`<shop-slug>@rebuy.ug` / `Shop1234!`).
+```bash
+cp .env.example .env
+python3 -c "import secrets;print('REBUY_SECRET_KEY='+secrets.token_urlsafe(48))"   # add to .env
+```
+
+`.env` is git-ignored. `python3 serve.py` reads the environment as-is, so either
+`export` the variables or use your platform's env-file flag.
+
+### Security model
+
+| Control | Behaviour |
+|---|---|
+| Password storage | PBKDF2-SHA256, 210,000 iterations, per-user salt, constant-time compare |
+| Sessions | 256-bit opaque tokens, stored as SHA-256 hashes, 14-day expiry, revocable per device |
+| Cookies | `HttpOnly`, `SameSite=Lax`, `Secure` in production |
+| Google sign-in | OIDC authorization-code + PKCE, signed `state`, ID-token issuer/audience/expiry checks |
+| Login throttling | 6 failed attempts locks the address for 15 minutes |
+| CSRF | state-changing requests with a foreign `Origin` or `Sec-Fetch-Site: cross-site` are rejected |
+| Headers | CSP, `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, referrer policy |
+| Password reset | single-use token, hashed at rest, 1-hour expiry, signs out every device |
+| Enumeration | reset and login never reveal whether an address exists |
+| Demo data | opt-in (`REBUY_SEED_DEMO=1`), never in production, `@example.com` identities, random passwords |
+
+### Tests
+
+```bash
+python3 scripts/test_auth.py        # 41 checks: hashing, OAuth tokens, sessions, throttling, reset
+npm install --silent jsdom
+node scripts/test_pages.js          # renders every static view in jsdom, asserts clean output
+```
+
+In `REBUY_ENV=production` the app refuses to start without a `REBUY_SECRET_KEY`
+of at least 32 characters, and it will **not** seed a demo fleet.
+
+### Accounts
+
+There are no default logins — no seeded passwords exist in the codebase.
+
+| How you get in | Requires |
+|---|---|
+| Continue with Google | `REBUY_GOOGLE_CLIENT_ID` + `REBUY_GOOGLE_CLIENT_SECRET` |
+| Email + password | self-serve signup, or an invitation from a shop owner |
+| Platform admin at `/admin` | your email listed in `REBUY_ADMIN_EMAILS` |
+
+Locally, `REBUY_ENV=development` (the default) lets you seed a throwaway demo
+fleet with `REBUY_SEED_DEMO=1`. Demo users live on `@example.com` with random
+passwords, so they exist as data but cannot be signed into.
+
+### Google sign-in setup
+
+1. Google Cloud Console → **APIs & Services → Credentials → Create credentials
+   → OAuth client ID → Web application**.
+2. Authorised redirect URI: `https://<your-domain>/api/auth/google/callback`
+   (plus `http://localhost:8000/api/auth/google/callback` for local work).
+3. Put the client ID and secret in the environment, and set
+   `REBUY_PUBLIC_URL=https://<your-domain>` so the redirect URI is built correctly.
 
 ## How the retention engine works
 

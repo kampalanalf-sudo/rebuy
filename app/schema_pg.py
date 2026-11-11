@@ -53,18 +53,24 @@ STATEMENTS = [
   role          TEXT NOT NULL DEFAULT 'owner',
   name          TEXT NOT NULL,
   email         TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  salt          TEXT NOT NULL,
+  password_hash TEXT DEFAULT '',
+  salt          TEXT DEFAULT '',
+  google_sub    TEXT DEFAULT '',
+  email_verified SMALLINT DEFAULT 0 CHECK (email_verified IN (0,1)),
   last_login    TEXT,
   created_at    TEXT NOT NULL
 )""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_google ON users(google_sub) WHERE google_sub <> ''",
     "CREATE INDEX IF NOT EXISTS idx_users_shop ON users(shop_id)",
 
     """CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
-  expires_at TEXT NOT NULL
+  expires_at TEXT NOT NULL,
+  ip         TEXT DEFAULT '',
+  user_agent TEXT DEFAULT '',
+  method     TEXT DEFAULT 'password'
 )""",
     "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)",
 
@@ -325,6 +331,27 @@ STATEMENTS = [
   processed    SMALLINT DEFAULT 0 CHECK (processed IN (0,1)),
   created_at   TEXT NOT NULL
 )""",
+
+    """CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  used_at    TEXT,
+  created_at TEXT NOT NULL
+)""",
+
+    """CREATE TABLE IF NOT EXISTS invites (
+  id         BIGSERIAL PRIMARY KEY,
+  shop_id    BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+  email      TEXT NOT NULL,
+  role       TEXT DEFAULT 'staff',
+  token_hash TEXT NOT NULL,
+  invited_by TEXT DEFAULT '',
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT,
+  created_at TEXT NOT NULL
+)""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_invite ON invites(shop_id, email)",
 
     """CREATE TABLE IF NOT EXISTS platform_meta (
   k TEXT PRIMARY KEY,

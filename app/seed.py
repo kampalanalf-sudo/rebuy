@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import random
 import re
 from datetime import timedelta
@@ -211,9 +212,26 @@ def phone(i: int) -> str:
 
 
 # ------------------------------------------------------------------ bootstrapping
+DEMO_EMAIL_DOMAIN = os.environ.get("REBUY_DEMO_EMAIL_DOMAIN", "example.com")
+
+
+def demo_password() -> str:
+    """Demo accounts get a random password and are never meant to be signed into
+    with one. Set REBUY_DEMO_PASSWORD only for a throwaway local demo."""
+    return os.environ.get("REBUY_DEMO_PASSWORD") or secrets.token_urlsafe(24)
+
+
 def ensure_bootstrapped(force: bool = False) -> dict:
+    """Create the schema and templates. The demo fleet only exists when the
+    environment explicitly allows it (REBUY_SEED_DEMO=1, never in production)."""
     db.init_schema()
     engine.seed_default_templates()
+    from . import config
+
+    if not config.SEED_DEMO:
+        n_users = db.scalar("SELECT COUNT(*) FROM users", (), 0)
+        return {"skipped": True, "reason": "demo seeding disabled (REBUY_SEED_DEMO=0)",
+                "users": n_users}
     if db.scalar("SELECT COUNT(*) FROM users", (), 0) == 0 or force:
         return generate_demo_fleet(shops=int(os.environ.get("REBUY_SEED_SHOPS", "120")), reset=force)
     return {"skipped": True}
@@ -246,10 +264,10 @@ def generate_demo_fleet(shops: int = 120, reset: bool = False) -> dict:
     sectors[0], sectors[1], sectors[2], sectors[3] = "Supermarket", "Salon & Spa", "LPG & Water", "Auto Garage"
     # the first four shops are the ones we demo with, so they get fixed identities
     FIXED = {
-        1: ("Kampala Fresh Mart", "kampala-fresh-mart", "Sarah Nalubowa", "owner@kampalafresh.ug", "Kampala"),
-        2: ("Nakato Hair Lounge", "nakato-hair-lounge", "Doreen Nakato", "owner@nakatohair.ug", "Kampala"),
-        3: ("Gas & Go LPG", "gas-and-go-lpg", "Peter Mugisha", "owner@gasandgo.ug", "Wakiso"),
-        4: ("Kato Auto Care", "kato-auto-care", "Joseph Kato", "owner@katoauto.ug", "Kampala"),
+        1: ("Kampala Fresh Mart", "kampala-fresh-mart", "Sarah Nalubowa", f"demo.supermarket@{DEMO_EMAIL_DOMAIN}", "Kampala"),
+        2: ("Nakato Hair Lounge", "nakato-hair-lounge", "Doreen Nakato", f"demo.nakato@{DEMO_EMAIL_DOMAIN}", "Kampala"),
+        3: ("Gas & Go LPG", "gas-and-go-lpg", "Peter Mugisha", f"demo.gasandgo@{DEMO_EMAIL_DOMAIN}", "Wakiso"),
+        4: ("Kato Auto Care", "kato-auto-care", "Joseph Kato", f"demo.katoauto@{DEMO_EMAIL_DOMAIN}", "Kampala"),
     }
     shop_rows, used_names = [], {v[0] for v in FIXED.values()}
     for i in range(shops):
@@ -269,7 +287,7 @@ def generate_demo_fleet(shops: int = 120, reset: bool = False) -> dict:
         created = today - timedelta(days=random.randint(3, 330), hours=random.randint(0, 23))
         price = {"starter": 49000, "growth": 129000, "scale": 299000}[plan]
         owner = fixed[2] if fixed else f"{random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
-        email = fixed[3] if fixed else f"{slug.replace('-', '.')}@{random.choice(['gmail.com', 'outlook.com', 'yahoo.com', 'rebuy.ug'])}"
+        email = fixed[3] if fixed else f"{slug.replace('-', '.')}@{DEMO_EMAIL_DOMAIN}"
         ph = phone(i)
         city = fixed[4] if fixed else random.choice(CITIES)
         shop_rows.append((i + 1, name, slug, owner, email, ph, city, "Uganda", sector, plan,
@@ -287,12 +305,15 @@ def generate_demo_fleet(shops: int = 120, reset: bool = False) -> dict:
     stats["shops"] = len(shop_rows)
 
     # ---------------------------------------------------------------- users
-    admin_id = auth.create_user(None, "admin", "Platform Admin", "admin@rebuy.app", "Admin1234!")
+    # Demo identities are synthetic: reserved example.com addresses and random
+    # passwords, so no demo account can be signed into by knowing the seed.
+    pw = demo_password()
+    auth.create_user(None, "admin", "Demo Admin", f"admin@{DEMO_EMAIL_DOMAIN}", pw)
     stats["users"] += 1
-    uid = auth.create_user(1, "owner", "Sarah Nalubowa", "owner@kampalafresh.ug", "Shop1234!")
+    auth.create_user(1, "owner", "Sarah Nalubowa", f"demo.supermarket@{DEMO_EMAIL_DOMAIN}", pw)
     stats["users"] += 1
     for i, r in enumerate(shop_rows[1:24], start=2):
-        auth.create_user(i, "owner", r[3], f"{r[2].replace('-', '.')}@rebuy.ug", "Shop1234!")
+        auth.create_user(i, "owner", r[3], f"{r[2].replace('-', '.')}@{DEMO_EMAIL_DOMAIN}", pw)
         stats["users"] += 1
 
 
@@ -521,7 +542,7 @@ def _bulk_aggregates() -> None:
               last_purchase_at = (SELECT MAX(s.sale_date) FROM sales s WHERE s.customer_id = customers.id),
               first_seen = IFNULL((SELECT MIN(s.sale_date) FROM sales s WHERE s.customer_id = customers.id), first_seen)""")
     db.x("""UPDATE customers SET lifetime_value =
-              ROUND((IFNULL(total_spent,0) / MAX(1, visit_count) * MIN(visit_count, 12))::numeric, 2)""")
+              ROUND(IFNULL(total_spent,0) / MAX(1, visit_count) * MIN(visit_count, 12), 2)""")
     db.x("""UPDATE customers SET risk_band = CASE
               WHEN last_purchase_at IS NULL OR visit_count = 0 THEN 'new'
               WHEN (julianday('now') - julianday(last_purchase_at)) /

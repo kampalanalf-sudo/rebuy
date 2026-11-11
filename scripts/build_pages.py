@@ -350,7 +350,20 @@ SHIM_JS = r"""
     if (p === "/api/health") return {ok: true, time: nowIso(), shops: 1, backend: "static-demo",
       note: "Snapshot generated " + d.generated_at};
     if (p === "/api/meta/cycles") return {categories: d.meta.category_cycles, risk_bands: d.meta.risk_bands};
-    if (p === "/api/auth/me") return {authenticated: true, user: d.user, shop: d.shop};
+    if (p === "/api/auth/me") return {authenticated: true, user: d.user, shop: d.shop,
+      google_enabled: false, signup_open: false, demo: true};
+
+    // read-only stand-ins for the account + team surface
+    if (p === "/api/auth/sessions") return {sessions: [
+      {id: "demo-session", created_at: d.generated_at, expires_at: "", ip: "127.0.0.1",
+       user_agent: "Demo snapshot (read-only)", method: "password", current: true}]};
+    if (p === "/api/team") return {
+      members: [{id: 0, name: (d.user || {}).name || "Demo Owner", email: (d.user || {}).email || "",
+                 role: "owner", last_login: d.generated_at, created_at: (d.shop || {}).created_at || "",
+                 is_you: true, google_linked: false}],
+      invites: [],
+      roles: [{key: "owner", label: "Owner", blurb: "Full access, billing, team"},
+              {key: "staff", label: "Staff", blurb: "Sales, customers, reminders"}]};
 
     if (p === "/api/shop") {
       const due = d.reminders.filter(r => r.is_due).length;
@@ -504,9 +517,16 @@ SHIM_JS = r"""
 
     if (p === "/api/sales") {
       const per = Number(q.get("per") || 25), page = Number(q.get("page") || 1);
-      const rows = d.sales.map(s => Object.assign({}, s, {
-        customer: (d.customers.find(c => c.id === s.customer_id) || {}).name || "Walk-in",
-        items: d.sale_items.filter(it => it.sale_id === s.id)}));
+      // mirrors app/api.py list_sales(): items is a comma-joined string of
+      // product names, plus an item_count — not the raw line-item array.
+      const rows = d.sales.map(s => {
+        const lines = d.sale_items.filter(it => it.sale_id === s.id);
+        return Object.assign({}, s, {
+          customer: (d.customers.find(c => c.id === s.customer_id) || {}).name || "Walk-in",
+          customer_name: (d.customers.find(c => c.id === s.customer_id) || {}).name || "Walk-in",
+          items: lines.map(l => l.product_name).join(", "),
+          item_count: lines.length});
+      });
       const revenue = rows.reduce((a, s) => a + Number(s.total || 0), 0);
       return {rows: rows.slice((page - 1) * per, page * per), sales: rows, total: rows.length,
         page: page, pages: Math.max(1, Math.ceil(rows.length / per)), per: per,
@@ -640,9 +660,11 @@ SHIM_JS = r"""
     if (url.pathname === "/api/auth/logout") return Promise.resolve(reply({ok: true}, 200));
     if (url.pathname === "/api/auth/me") {
       // never let a snapshot hiccup look like "you are logged out"
-      return load().then(() => reply({authenticated: true, user: demo.user, shop: demo.shop}, 200))
+      return load().then(() => reply({authenticated: true, user: demo.user, shop: demo.shop,
+                                      google_enabled: false, signup_open: false, demo: true}, 200))
         .catch(e => reply({authenticated: true, user: demo.user || {name: "Demo", role: "owner"},
-                           shop: demo.shop || {name: "Rebuy demo"}, warning: String(e.message)}, 200));
+                           shop: demo.shop || {name: "Rebuy demo"}, google_enabled: false,
+                           signup_open: false, demo: true, warning: String(e.message)}, 200));
     }
     return load().then(() => {
       if (isWrite) {
@@ -741,10 +763,10 @@ ADMIN_SHIM_JS = r"""
     const p = path.replace(/\/+$/, "") || "/";
     const days = url.searchParams.get("days") || "30";
     if (p === "/api/auth/me") {
-      return {authenticated: true, user: {id: 0, name: "Demo Admin", email: "admin@rebuy.app",
-        role: "admin", shop_id: null}, shop: null};
+      return {authenticated: true, user: {id: 0, name: "Demo Admin", email: "admin@rebuy.ug",
+        role: "admin", shop_id: null}, shop: null, google_enabled: false, signup_open: false, demo: true};
     }
-    if (p === "/api/auth/login") return {ok: true, user: {id: 0, name: "Demo Admin", email: "admin@rebuy.app", role: "admin"}};
+    if (p === "/api/auth/login") return {ok: true, user: {id: 0, name: "Demo Admin", email: "admin@rebuy.ug", role: "admin"}};
     if (p === "/api/admin/overview") return snap.overview;
     if (p === "/api/admin/revenue") return snap.revenue;
     if (p === "/api/admin/shops") {

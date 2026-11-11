@@ -20,6 +20,12 @@ that gap:
 Both shims refuse writes with an explicit "read-only demo" message rather than
 pretending a save worked.
 
+`/api/auth/me` reports `google_enabled: false` and `signup_open: false` in the
+snapshot, so the sign-in screen shows "single sign-on is not enabled on this
+deployment" instead of a Google button that cannot possibly work. Everything
+account-related (passwords, sessions, invitations) is stubbed read-only; the
+real flows live in the Python app.
+
 ## Rebuild
 
 ```bash
@@ -48,7 +54,7 @@ from a branch → Branch: `main`, folder `/docs`**.
 
 | Works | Disabled |
 |---|---|
-| Dashboard, customers, customer 360, reminders, inbox, reports, products, sales, loyalty, coupons, segments | Recording a sale, sending a message, importing a file |
+| Dashboard, customers, customer 360, reminders, inbox, reports, products, sales, loyalty, coupons, segments, team list, profile | Recording a sale, sending a message, importing a file, inviting a team member, editing a password |
 | Admin overview, shops, shop detail, messaging, retention, revenue, queue, capacity, providers, audit log | Pausing a shop, editing credentials, reseeding, running the worker |
 
 For the full app with a live database, run `python3 serve.py` (SQLite) or point

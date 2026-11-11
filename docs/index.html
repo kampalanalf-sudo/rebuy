@@ -332,6 +332,8 @@ const NAV = [
   {sec: "Setup"},
   {r: "/import", label: "Import data", ic: "⇪"},
   {r: "/settings", label: "Settings", ic: "⚙"},
+  {r: "/team", label: "Team", ic: "⚇"},
+  {r: "/account", label: "My profile", ic: "◉"},
 ];
 
 function shell(inner) {
@@ -415,16 +417,17 @@ async function boot() {
   });
   const path = (location.hash || "#/dashboard").slice(1) || "/dashboard";
   S.route = path;
-  const isOpenRoute = ["/login", "/signup", "/onboarding", "/admin"].includes("/" + path.split("/")[1]);
+  const isOpenRoute = ["/login", "/signup", "/onboarding", "/admin", "/forgot", "/reset"].includes("/" + path.split("/")[1]);
   try {
     const me = await api("/api/auth/me");
+    S.meta = {google_enabled: !!me.google_enabled, signup_open: me.signup_open !== false};
     if (me.authenticated) {
       S.user = me.user; S.shop = me.shop;
       if (S.user.role === "admin" && path.split("/")[1] !== "admin") { location.hash = "#/admin"; return; }
     }
   } catch (e) { /* offline: fall through */ }
   if (!S.user && !isOpenRoute) { location.hash = "#/login"; return; }
-  if (S.user && ["/login", "/signup"].includes(path)) { location.hash = S.user.role === "admin" ? "#/admin" : "#/dashboard"; return; }
+  if (S.user && ["/login", "/signup"].includes(path.split("?")[0])) { location.hash = S.user.role === "admin" ? "#/admin" : "#/dashboard"; return; }
   if (S.user) refreshNotice();
   render(path);
 }
@@ -497,7 +500,18 @@ async function logout() {
 }
 
 /* ===================================================================== AUTH */
-page("/login", {}, () => `<div class="authwrap">
+page("/login", {}, async () => {
+  const err = new URLSearchParams(location.hash.split("?")[1] || "").get("error");
+  const msgs = {
+    google_cancelled: "Google sign-in was cancelled.",
+    state_expired: "That sign-in link expired — please try again.",
+    state_mismatch: "Sign-in could not be verified — please try again.",
+    google_unverified: "Your Google email is not verified.",
+    not_invited: "That email has not been invited to this workspace yet.",
+    google_disabled: "Google sign-in is not enabled on this deployment.",
+  };
+  setTimeout(() => { renderGoogle(); S.flash = null; }, 0);
+  return `<div class="authwrap">
   <div class="authside">
     <div class="logo" style="padding:0"><span class="mark">↻</span> Rebuy</div>
     <h2>Your customers buy once. Rebuy brings them back.</h2>
@@ -511,21 +525,50 @@ page("/login", {}, () => `<div class="authwrap">
   <div class="authmain"><div class="authcard">
     <h2>Welcome back</h2>
     <div class="muted" style="margin-bottom:20px">Sign in to your shop dashboard.</div>
+    ${err ? `<div class="banner bad" style="margin-bottom:14px">${esc(msgs[err] || "Sign-in failed — please try again.")}</div>` : ""}
     <form onsubmit="doLogin(event)">
       <div class="field"><label class="f">Email</label><input class="input" name="email" type="email" autocomplete="username" required placeholder="owner@yourshop.ug"></div>
       <div class="field"><label class="f">Password</label><input class="input" name="password" type="password" autocomplete="current-password" required placeholder="••••••••"></div>
       <button class="btn primary" style="width:100%;justify-content:center;padding:11px" type="submit">Sign in</button>
     </form>
     <div class="tiny mt12" style="text-align:center">New to Rebuy? <a href="#/signup">Create your shop account</a></div>
-    <div class="demo-creds">
-      <b>Demo shops</b>
-      <div class="row" style="justify-content:space-between"><span>Kampala Fresh Mart (Supermarket)</span><span class="mono">owner@kampalafresh.ug</span></div>
-      <div class="row" style="justify-content:space-between"><span>Nakato Hair Lounge (Salon)</span><span class="mono">owner@nakatohair.ug</span></div>
-      <div class="row" style="justify-content:space-between"><span>Platform admin</span><span class="mono">admin@rebuy.app</span></div>
-      <div class="tiny mt8">Password for all three: <span class="mono">Shop1234!</span> / <span class="mono">Admin1234!</span> for admin · <a href="#/admin">admin login</a></div>
+    <div id="googleSlot"></div>
+    <div class="tiny mt16" style="text-align:center">
+      <a href="#/forgot">Forgot your password?</a> · <a href="#/admin">Platform admin</a>
+    </div>
+    <div class="tiny mt16" style="text-align:center;color:#8f87c9">
+      Protected by rate limiting and session monitoring.
     </div>
   </div></div>
-</div>`);
+</div>`;
+});
+
+function googleConfigured() { return !!(S.meta && S.meta.google_enabled); }
+
+async function startGoogle() {
+  try {
+    const r = await api("/api/auth/google/start?next=/dashboard");
+    location.href = r.url;
+  } catch (e) { toast(e.message || "Google sign-in is unavailable", "bad"); }
+}
+
+function renderGoogle() {
+  const slot = $("#googleSlot");
+  if (!slot) return;
+  if (!googleConfigured()) {
+    slot.innerHTML = `<div class="tiny mt16" style="text-align:center;color:#8f87c9">
+      Single sign-on is not enabled on this deployment.</div>`;
+    return;
+  }
+  slot.innerHTML = `<div class="row mt16" style="gap:10px;align-items:center">
+      <div style="flex:1;height:1px;background:#e5e2f2"></div><span class="tiny">or</span>
+      <div style="flex:1;height:1px;background:#e5e2f2"></div></div>
+    <button class="btn" style="width:100%;justify-content:center;padding:10px;margin-top:12px" onclick="startGoogle()">
+      <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.8-.4-4H24v7.6h12.1c-.2 2-1.6 5-4.5 7l-.1.4 6.5 5 .5.1c4.1-3.8 6.6-9.4 6.6-16.1"/><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-.4.1-6.8 5.3-.1.4C7.8 41 15.3 46 24 46"/><path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.8-2.9-.8-4.4s.3-3 .7-4.4l-.1-.4-6.9-5.4-.2.1C2.7 16.9 2 20.4 2 24s.7 7.1 2.2 10.1z"/><path fill="#EA4335" d="M24 9.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 3.3 29.9 1 24 1 15.3 1 7.8 6 4.4 13.9l7.1 5.4C12.9 14 17.8 9.5 24 9.5"/></svg>
+      Continue with Google
+    </button>
+    <div class="tiny mt8" style="text-align:center">No password to remember — we verify your Google email.</div>`;
+}
 
 async function doLogin(ev) {
   ev.preventDefault();
@@ -543,7 +586,13 @@ async function doLogin(ev) {
   }
 }
 
-page("/signup", {}, () => `<div class="authwrap">
+page("/signup", {}, () => {
+  if (S.meta && S.meta.signup_open === false) return `<div class="authwrap"><div class="authmain"><div class="authcard">
+    <h2>Invite only</h2>
+    <div class="muted" style="margin-bottom:16px">Self-serve signup is closed on this deployment. Ask your Rebuy contact for an invitation, then sign in with Google.</div>
+    <a class="btn primary" href="#/login" style="width:100%;justify-content:center;padding:11px">Back to sign in</a>
+  </div></div></div>`;
+  return `<div class="authwrap">
   <div class="authside">
     <div class="logo" style="padding:0"><span class="mark">↻</span> Rebuy</div>
     <h2>Set up your shop in 3 minutes.</h2>
@@ -571,7 +620,8 @@ page("/signup", {}, () => `<div class="authwrap">
     </form>
     <div class="tiny mt12" style="text-align:center">Already have an account? <a href="#/login">Sign in</a></div>
   </div></div>
-</div>`);
+</div>`;
+});
 
 async function doSignup(ev) {
   ev.preventDefault();
@@ -1881,6 +1931,232 @@ page("/settings", {}, async () => {
     </div>
   </div>`);
 });
+
+page("/forgot", {}, () => `<div class="authwrap">
+  <div class="authside">
+    <div class="logo" style="padding:0"><span class="mark">↻</span> Rebuy</div>
+    <h2>Locked out? It happens.</h2>
+    <p>We email you a single-use link that expires in an hour. Nothing changes until you open it and pick a new password.</p>
+  </div>
+  <div class="authmain"><div class="authcard">
+    <h2>Reset your password</h2>
+    <div class="muted" style="margin-bottom:18px">Enter the email you sign in with.</div>
+    <form onsubmit="doForgot(event)">
+      <div class="field"><label class="f">Email</label><input class="input" name="email" type="email" autocomplete="username" required placeholder="you@yourshop.ug"></div>
+      <button class="btn primary" style="width:100%;justify-content:center;padding:11px" type="submit">Send reset link</button>
+    </form>
+    <div class="tiny mt16" style="text-align:center"><a href="#/login">Back to sign in</a></div>
+  </div></div>
+</div>`);
+
+async function doForgot(ev) {
+  ev.preventDefault();
+  const f = ev.target, btn = $("button[type=submit]", f);
+  btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    await api("/api/auth/forgot", {method: "POST", body: {email: f.email.value.trim()}});
+    f.outerHTML = `<div class="banner ok">If that email has an account, a reset link is on its way. Check your inbox and spam folder.</div>
+      <a class="btn mt16" href="#/login" style="width:100%;justify-content:center">Back to sign in</a>`;
+  } catch (e) {
+    toast(e.message || "Could not send the link", "bad");
+    btn.disabled = false; btn.textContent = "Send reset link";
+  }
+}
+
+page("/reset", {}, () => {
+  const token = new URLSearchParams(location.hash.split("?")[1] || "").get("token") || "";
+  return `<div class="authwrap">
+  <div class="authside">
+    <div class="logo" style="padding:0"><span class="mark">↻</span> Rebuy</div>
+    <h2>Choose a new password.</h2>
+    <p>Signing in with the new password signs out every other device, so anyone holding your old session is locked out too.</p>
+  </div>
+  <div class="authmain"><div class="authcard">
+    <h2>New password</h2>
+    ${token ? `<form onsubmit="doReset(event)">
+      <input type="hidden" name="token" value="${esc(token)}">
+      <div class="field"><label class="f">New password</label><input class="input" name="password" type="password" autocomplete="new-password" minlength="10" required>
+        <div class="tiny muted mt8">At least 10 characters.</div></div>
+      <div class="field"><label class="f">Confirm</label><input class="input" name="confirm" type="password" autocomplete="new-password" required></div>
+      <button class="btn primary" style="width:100%;justify-content:center;padding:11px" type="submit">Set password &amp; sign in</button>
+    </form>` : `<div class="banner bad">This link is missing its token. Request a new one.</div>
+      <a class="btn mt16" href="#/forgot" style="width:100%;justify-content:center">Send a new link</a>`}
+  </div></div>
+</div>`;
+});
+
+async function doReset(ev) {
+  ev.preventDefault();
+  const f = ev.target, btn = $("button[type=submit]", f);
+  if (f.password.value !== f.confirm.value) { toast("Passwords do not match", "bad"); return; }
+  btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const r = await api("/api/auth/reset", {method: "POST", body: {token: f.token.value, password: f.password.value}});
+    S.user = r.user; S.shop = r.shop;
+    toast("Password set — welcome back", "ok");
+    location.hash = r.shop && !r.shop.onboarded_at ? "#/onboarding" : "#/dashboard";
+    location.reload();
+  } catch (e) {
+    toast(e.message || "That link did not work", "bad");
+    btn.disabled = false; btn.textContent = "Set password & sign in";
+  }
+}
+
+/* ==================================================================== TEAM */
+page("/team", {}, async () => {
+  const d = await api("/api/team");
+  const me = S.user || {};
+  const canManage = me.role === "owner" || me.role === "admin";
+  const members = d.members || [], invites = d.invites || [];
+  return shell(`
+  <div class="pagehead">
+    <h2>Team</h2>
+    <div class="muted">Everyone who can sign in to this shop. Owners manage billing and people; staff work the counter.</div>
+  </div>
+  <div class="grid g21">
+    <div class="card"><div class="hd"><h3>Members</h3><span class="muted tiny">${members.length}</span></div><div class="bd">
+      ${members.map(m => `<div class="recent-li">
+        <div class="row" style="gap:10px;align-items:center">
+          <div class="av">${esc((m.name || "?").slice(0, 2).toUpperCase())}</div>
+          <div style="flex:1">
+            <div><b>${esc(m.name)}</b> ${m.is_you ? `<span class="pill">you</span>` : ""} ${m.role === "owner" ? `<span class="pill ok">owner</span>` : `<span class="pill">staff</span>`}</div>
+            <div class="tiny muted">${esc(m.email)} · ${m.google_linked ? "Google sign-in" : "Password sign-in"}${m.last_login ? " · last active " + datef(m.last_login) : ""}</div>
+          </div>
+          ${canManage && !m.is_you ? `<div class="row" style="gap:6px">
+            <select class="input tiny" style="width:auto" onchange="setRole(${m.id}, this.value)">
+              <option value="owner" ${m.role === "owner" ? "selected" : ""}>Owner</option>
+              <option value="staff" ${m.role === "staff" ? "selected" : ""}>Staff</option>
+            </select>
+            <button class="btn tiny danger" onclick="removeMember(${m.id}, '${esc(m.name).replace(/'/g, "&#39;")}')">Remove</button>
+          </div>` : ""}
+        </div></div>`).join("") || `<div class="empty">No members yet</div>`}
+    </div></div>
+
+    <div>
+      <div class="card"><div class="hd"><h3>Invite someone</h3></div><div class="bd">
+        ${canManage ? `<form onsubmit="inviteMember(event)">
+          <div class="field"><label class="f">Work email</label><input class="input" name="email" type="email" required placeholder="name@yourshop.ug"></div>
+          <div class="field"><label class="f">Role</label><select class="input" name="role"><option value="staff">Staff — sales, customers, reminders</option><option value="owner">Owner — full access</option></select></div>
+          <button class="btn primary" style="width:100%;justify-content:center">Send invitation</button>
+          <div class="tiny muted mt8">They sign in with that Google account — no password to share.</div>
+        </form>` : `<div class="empty">Only the shop owner can invite people.</div>`}
+      </div></div>
+
+      ${invites.length ? `<div class="card mt16"><div class="hd"><h3>Pending</h3><span class="muted tiny">${invites.length}</span></div><div class="bd">
+        ${invites.map(i => `<div class="recent-li"><div class="row" style="align-items:center">
+          <div style="flex:1"><div>${esc(i.email)}</div><div class="tiny muted">${esc(i.role)} · expires ${datef(i.expires_at)}</div></div>
+          <button class="btn tiny" onclick="cancelInvite(${i.id})">Cancel</button>
+        </div></div>`).join("")}
+      </div></div>` : ""}
+    </div>
+  </div>`);
+});
+
+async function inviteMember(ev) {
+  ev.preventDefault();
+  const f = ev.target, btn = $("button[type=submit]", f) || $("button", f);
+  btn.disabled = true;
+  try {
+    const r = await api("/api/team/invite", {method: "POST", body: {email: f.email.value.trim(), role: f.role.value}});
+    toast(r.invite.email_sent ? "Invitation emailed" : "Invitation created — share the link", "ok");
+    if (!r.invite.email_sent && r.invite.link) {
+      try { await navigator.clipboard.writeText(r.invite.link); toast("Invite link copied", "ok"); } catch (e) {}
+    }
+    render(S.route);
+  } catch (e) { toast(e.message, "bad"); btn.disabled = false; }
+}
+async function setRole(uid, role) {
+  try { await api("/api/team/role", {method: "POST", body: {user_id: uid, role}}); toast("Role updated", "ok"); render(S.route); }
+  catch (e) { toast(e.message, "bad"); render(S.route); }
+}
+async function removeMember(uid, name) {
+  if (!confirm(`Remove ${name} from this shop? They will be signed out immediately.`)) return;
+  try { await api("/api/team/remove", {method: "POST", body: {user_id: uid}}); toast("Removed", "ok"); render(S.route); }
+  catch (e) { toast(e.message, "bad"); }
+}
+async function cancelInvite(id) {
+  try { await api("/api/team/cancel-invite", {method: "POST", body: {invite_id: id}}); render(S.route); }
+  catch (e) { toast(e.message, "bad"); }
+}
+
+/* ================================================================= ACCOUNT */
+page("/account", {}, async () => {
+  const [me, sess] = await Promise.all([api("/api/auth/me"), api("/api/auth/sessions")]);
+  const u = me.user || {}, sessions = sess.sessions || [];
+  const roleLabel = u.role === "admin" ? "Platform admin" : u.role === "owner" ? "Shop owner" : "Staff";
+  return shell(`
+  <div class="pagehead"><h2>My profile</h2>
+    <div class="muted">Your account, how you sign in, and the devices holding a session.</div></div>
+  <div class="grid g21">
+    <div>
+      <div class="card"><div class="hd"><h3>Account</h3></div><div class="bd">
+        <div class="row" style="gap:14px;align-items:center;margin-bottom:14px">
+          <div class="av lg">${esc((u.name || "?").slice(0, 2).toUpperCase())}</div>
+          <div><div style="font-size:16px;font-weight:650">${esc(u.name)}</div>
+            <div class="tiny muted">${esc(u.email)}</div></div>
+        </div>
+        <div class="statline"><span class="muted">Role</span><b>${roleLabel}</b></div>
+        <div class="statline"><span class="muted">Shop</span><b>${esc((S.shop && S.shop.name) || "Platform")}</b></div>
+        <div class="statline"><span class="muted">Member since</span><b>${datef(u.created_at)}</b></div>
+        <div class="statline"><span class="muted">Last sign-in</span><b>${u.last_login ? datef(u.last_login) : "—"}</b></div>
+      </div></div>
+
+      <div class="card mt16"><div class="hd"><h3>Sign-in method</h3></div><div class="bd">
+        <div class="statline"><span class="muted">Google</span><b>${u.google_linked ? "Linked" : "Not linked"}</b></div>
+        <div class="statline"><span class="muted">Password</span><b>${u.has_password ? "Set" : "None"}</b></div>
+        ${u.google_linked ? `<div class="tiny muted mt8">You can sign in with Google using ${esc(u.email)}.</div>` : ""}
+        ${me.google_enabled ? `<button class="btn mt12" onclick="linkGoogle()">${u.google_linked ? "Re-link Google account" : "Link Google account"}</button>` : ""}
+      </div></div>
+
+      <div class="card mt16"><div class="hd"><h3>${u.has_password ? "Change password" : "Set a password"}</h3></div><div class="bd">
+        <form onsubmit="changePassword(event)">
+          ${u.has_password ? `<div class="field"><label class="f">Current password</label><input class="input" name="current_password" type="password" autocomplete="current-password" required></div>` : ""}
+          <div class="field"><label class="f">New password</label><input class="input" name="new_password" type="password" autocomplete="new-password" minlength="10" required>
+            <div class="tiny muted mt8">At least 10 characters. Changing it signs out every other device.</div></div>
+          <div class="field"><label class="f">Confirm</label><input class="input" name="confirm" type="password" autocomplete="new-password" required></div>
+          <button class="btn primary">${u.has_password ? "Update password" : "Set password"}</button>
+        </form>
+      </div></div>
+    </div>
+
+    <div>
+      <div class="card"><div class="hd"><h3>Active sessions</h3><span class="muted tiny">${sessions.length}</span></div><div class="bd">
+        ${sessions.map(s => `<div class="recent-li"><div class="row" style="align-items:center;gap:8px">
+          <div style="flex:1"><div class="tiny"><b>${s.method === "google" ? "Google" : "Password"}</b> · ${esc((s.ip || "unknown ip"))}</div>
+            <div class="tiny muted">${esc((s.user_agent || "").slice(0, 52) || "unknown device")} · started ${datef(s.created_at)}</div></div>
+          <button class="btn tiny" onclick="revokeSession('${esc(s.id)}')">Revoke</button>
+        </div></div>`).join("") || `<div class="empty">No other sessions</div>`}
+        <button class="btn danger mt12" style="width:100%;justify-content:center" onclick="logoutEverywhere()">Sign out everywhere</button>
+      </div></div>
+    </div>
+  </div>`);
+});
+
+async function linkGoogle() {
+  try { const r = await api("/api/auth/google/start?next=/account"); location.href = r.url; }
+  catch (e) { toast(e.message || "Google is not available", "bad"); }
+}
+async function changePassword(ev) {
+  ev.preventDefault();
+  const f = ev.target;
+  if (f.new_password.value !== f.confirm.value) { toast("Passwords do not match", "bad"); return; }
+  try {
+    await api("/api/auth/password", {method: "POST", body: {
+      current_password: f.current_password ? f.current_password.value : "",
+      new_password: f.new_password.value}});
+    toast("Password updated — other devices signed out", "ok");
+    f.reset(); render(S.route);
+  } catch (e) { toast(e.message, "bad"); }
+}
+async function revokeSession(id) {
+  try { await api("/api/auth/sessions/revoke", {method: "POST", body: {id}}); toast("Session revoked", "ok"); render(S.route); }
+  catch (e) { toast(e.message, "bad"); }
+}
+async function logoutEverywhere() {
+  if (!confirm("Sign out of every device, including this one?")) return;
+  try { await api("/api/auth/logout-all", {method: "POST", body: {}}); S.user = null; location.hash = "#/login"; location.reload(); }
+  catch (e) { toast(e.message, "bad"); }
+}
 
 async function saveShop(ev) {
   ev.preventDefault();

@@ -29,7 +29,7 @@ class Ctx:
     def __init__(self, **params):
         self.params = params
         self.query = params
-        self.user = {"id": 0, "name": "Demo Admin", "email": "admin@rebuy.app", "role": "admin",
+        self.user = {"id": 0, "name": "Demo Admin", "email": "admin@rebuy.ug", "role": "admin",
                      "shop_id": None}
         self.shop_id = None
 

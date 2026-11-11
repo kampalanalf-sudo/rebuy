@@ -1,10 +1,14 @@
 """Shop-owner API: everything a shop sees and does."""
 from __future__ import annotations
 
+import hashlib
 import json
+from datetime import timedelta
 import re
+import secrets
+import urllib.parse
 
-from . import auth, db, engine, imports, providers
+from . import auth, config, db, engine, imports, providers
 from .httpd import ApiError, route
 
 CHANNELS = ("whatsapp", "sms", "email")
@@ -34,50 +38,220 @@ def mask(cfg: dict) -> dict:
 
 
 # --------------------------------------------------------------------- session
+def _client_ip(ctx) -> str:
+    fwd = ctx.headers.get("x-forwarded-for") or ctx.headers.get("X-Forwarded-For") or ""
+    return (fwd.split(",")[0].strip() if fwd else (ctx.headers.get("x-real-ip") or "")).strip()
+
+
+def _ua(ctx) -> str:
+    return (ctx.headers.get("user-agent") or ctx.headers.get("User-Agent") or "")[:200]
+
+
+def _session_response(payload: dict, token: str, status: int = 200, extra: dict | None = None):
+    body = json.dumps(payload, default=str).encode()
+    headers = {"content-type": "application/json", "set-cookie": auth.session_cookie(token),
+               "content-length": str(len(body))}
+    headers.update(extra or {})
+    return status, headers, body
+
+
 @route("POST", "/api/auth/login", "none")
 def login(ctx):
-    email, password = ctx.b("email", ""), ctx.b("password", "")
+    email, password = auth.clean_email(ctx.b("email", "")), ctx.b("password", "")
     if not email or not password:
-        raise ApiError("email and password are required")
-    res = auth.login(email, password)
+        raise ApiError("Email and password are required", 400, "missing_fields")
+    if auth.is_locked(email):
+        raise ApiError("Too many attempts — try again in 15 minutes", 429, "locked")
+    res = auth.login(email, password, ip=_client_ip(ctx), ua=_ua(ctx))
     if not res:
-        raise ApiError("incorrect email or password", 401, "bad_credentials")
-    db.audit(res["user"]["email"], "auth.login", res["user"]["shop_id"])
-    body = json.dumps({"ok": True, "user": res["user"], "shop": res["shop"]}, default=str).encode()
-    cookie = f"rebuy_session={res['token']}; Path=/; HttpOnly; SameSite=Lax; Max-Age={auth.SESSION_DAYS * 86400}"
-    return 200, {"content-type": "application/json", "set-cookie": cookie, "content-length": str(len(body))}, body
+        raise ApiError("That email and password do not match", 401, "bad_credentials")
+    db.audit(res["user"]["email"], "auth.login", res["user"].get("shop_id"))
+    return _session_response({"ok": True, "user": res["user"], "shop": res["shop"]}, res["token"])
 
 
 @route("POST", "/api/auth/logout", "none")
 def logout(ctx):
-    cookie = ctx.headers.get("cookie", "")
-    m = re.search(r"rebuy_session=([^;]+)", cookie)
+    m = re.search(r"rebuy_session=([^;]+)", ctx.headers.get("cookie", ""))
     auth.logout(m.group(1) if m else None)
     body = json.dumps({"ok": True}).encode()
-    return 200, {"content-type": "application/json", "set-cookie":
-                 "rebuy_session=; Path=/; Max-Age=0", "content-length": str(len(body))}, body
+    return 200, {"content-type": "application/json", "set-cookie": auth.clear_cookie(),
+                 "content-length": str(len(body))}, body
+
+
+@route("POST", "/api/auth/logout-all", "user")
+def logout_all(ctx):
+    auth.logout_everywhere(ctx.user["id"])
+    db.audit(ctx.user["email"], "auth.logout_all", ctx.user.get("shop_id"))
+    body = json.dumps({"ok": True}).encode()
+    return 200, {"content-type": "application/json", "set-cookie": auth.clear_cookie(),
+                 "content-length": str(len(body))}, body
 
 
 @route("GET", "/api/auth/me", "none")
 def me(ctx):
     if not ctx.user:
-        return {"authenticated": False}
+        return {"authenticated": False, "google_enabled": config.GOOGLE_ENABLED,
+                "signup_open": config.ALLOW_SIGNUP}
+    u = db.q1("SELECT id, name, email, role, shop_id, password_hash, google_sub, created_at, last_login "
+              "FROM users WHERE id=?", (ctx.user["id"],))
     shop = db.q1("SELECT * FROM shops WHERE id=?", (ctx.user["shop_id"],)) if ctx.user["shop_id"] else None
-    return {"authenticated": True, "user": ctx.user, "shop": shop}
+    user = auth.public_user(u)
+    user["created_at"] = u.get("created_at")
+    user["last_login"] = u.get("last_login")
+    return {"authenticated": True, "user": user, "shop": shop,
+            "google_enabled": config.GOOGLE_ENABLED, "signup_open": config.ALLOW_SIGNUP}
+
+
+@route("GET", "/api/auth/sessions", "user")
+def sessions_list(ctx):
+    return {"sessions": auth.list_sessions(ctx.user["id"])}
+
+
+@route("POST", "/api/auth/sessions/revoke", "user")
+def session_revoke(ctx):
+    sid = (ctx.b("id") or "").strip()
+    if not sid:
+        raise ApiError("session id is required")
+    auth.revoke_session(ctx.user["id"], sid)
+    return {"ok": True, "sessions": auth.list_sessions(ctx.user["id"])}
+
+
+@route("POST", "/api/auth/password", "user")
+def change_password(ctx):
+    auth.change_password(ctx.user["id"], ctx.b("current_password", ""), ctx.b("new_password", ""))
+    db.audit(ctx.user["email"], "auth.password_changed", ctx.user.get("shop_id"))
+    # every session was revoked, so sign this browser back in
+    u = db.q1("SELECT * FROM users WHERE id=?", (ctx.user["id"],))
+    token = auth.start_session(u, _client_ip(ctx), _ua(ctx), "password")
+    return _session_response({"ok": True, "user": auth.public_user(u)}, token)
+
+
+# ------------------------------------------------------------ password reset
+@route("POST", "/api/auth/forgot", "none")
+def forgot_password(ctx):
+    """Always answers the same way, whether or not the address exists — otherwise
+    the endpoint becomes a free account-enumeration oracle."""
+    email = auth.clean_email(ctx.b("email", ""))
+    u = auth.find_user(email) if email else None
+    token = ""
+    if u and u.get("password_hash"):
+        token = secrets.token_urlsafe(32)
+        th = hashlib.sha256(token.encode()).hexdigest()
+        db.x("DELETE FROM password_resets WHERE user_id=?", (u["id"],))
+        db.insert("password_resets", {"token_hash": th, "user_id": u["id"],
+                                      "expires_at": (db.utcnow() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
+                                      "created_at": db.now_iso()})
+        link = f"{config.PUBLIC_URL or ''}/#/reset?token={token}"
+        driver, cfg = providers.credentials_for(None, "email")
+        try:
+            providers.send_email(email, "Reset your Rebuy password",
+                                 f"Someone asked to reset the password for {email} on Rebuy.\n\n"
+                                 f"Open this link within the hour to choose a new one:\n{link}\n\n"
+                                 f"If it was not you, ignore this email — your password stays as it is.",
+                                 cfg, driver)
+        except Exception:  # noqa: BLE001 — never reveal delivery problems to the caller
+            pass
+        db.audit(email, "auth.reset_requested", u.get("shop_id"))
+    # deliberately identical for known and unknown addresses
+    return {"ok": True, "message": "If that email has an account, a reset link is on its way."}
+
+
+@route("POST", "/api/auth/reset", "none")
+def reset_password(ctx):
+    token = (ctx.b("token") or "").strip()
+    new = ctx.b("password", "")
+    if not token:
+        raise ApiError("This reset link is incomplete", 400, "bad_token")
+    th = hashlib.sha256(token.encode()).hexdigest()
+    row = db.q1("SELECT * FROM password_resets WHERE token_hash=?", (th,))
+    if not row or row.get("used_at") or row["expires_at"] < db.now_iso():
+        raise ApiError("This reset link has expired — request a new one", 400, "expired_token")
+    try:
+        auth.set_password(row["user_id"], new)
+    except auth.AuthError as e:
+        raise ApiError(e.message, e.status, e.code)
+    db.x("UPDATE password_resets SET used_at=? WHERE token_hash=?", (db.now_iso(), th))
+    auth.logout_everywhere(row["user_id"])
+    u = db.q1("SELECT * FROM users WHERE id=?", (row["user_id"],))
+    db.audit(u["email"], "auth.reset_completed", u.get("shop_id"))
+    token2 = auth.start_session(u, _client_ip(ctx), _ua(ctx), "password")
+    shop = db.q1("SELECT * FROM shops WHERE id=?", (u["shop_id"],)) if u["shop_id"] else None
+    return _session_response({"ok": True, "user": auth.public_user(u), "shop": shop}, token2)
+
+
+# ------------------------------------------------------------------ google oauth
+@route("GET", "/api/auth/google/start", "none")
+def google_start(ctx):
+    base = config.PUBLIC_URL or ctx.b("origin", "")
+    want = ctx.q("next", "/dashboard")
+    if not want.startswith("/"):
+        want = "/dashboard"
+    try:
+        out = auth.google_authorize_url(auth_redirect_uri(ctx), want)
+    except auth.AuthError as e:
+        raise ApiError(e.message, e.status, e.code)
+    body = json.dumps({"url": out["url"]}).encode()
+    cookie = (f"rebuy_oauth={out['cookie']}; Path=/api/auth/google; HttpOnly; SameSite=Lax; "
+              f"Max-Age=600" + ("; Secure" if config.COOKIE_SECURE else ""))
+    return 200, {"content-type": "application/json", "set-cookie": cookie,
+                 "content-length": str(len(body))}, body
+
+
+def auth_redirect_uri(ctx) -> str:
+    if config.PUBLIC_URL:
+        return config.google_redirect_uri()
+    proto = (ctx.headers.get("x-forwarded-proto") or "http").split(",")[0].strip()
+    host = ctx.headers.get("x-forwarded-host") or ctx.headers.get("host") or "localhost:8000"
+    return f"{proto}://{host}/api/auth/google/callback"
+
+
+@route("GET", "/api/auth/google/callback", "none")
+def google_callback(ctx):
+    """Google redirects the browser here, so answer with a redirect rather than JSON."""
+    code = ctx.q("code", "")
+    state = ctx.q("state", "")
+    err = ctx.q("error", "")
+    if err:
+        return _redirect("/login?error=" + urllib.parse.quote(err), clear_oauth=True)
+    cookie = ctx.headers.get("cookie", "")
+    m = re.search(r"rebuy_oauth=([^;]+)", cookie)
+    if not code or not m:
+        return _redirect("/login?error=google_cancelled", clear_oauth=True)
+    try:
+        out = auth.google_exchange(code, auth_redirect_uri(ctx), m.group(1), state)
+        user = auth.provision_google_user(out["claims"])
+        token = auth.start_session(user, _client_ip(ctx), _ua(ctx), "google")
+    except auth.AuthError as e:
+        return _redirect("/login?error=" + urllib.parse.quote(e.code), clear_oauth=True)
+    db.audit(user["email"], "auth.login.google", user.get("shop_id"))
+    nxt = out["next"] if out["next"].startswith("/") else "/dashboard"
+    return _redirect("/#" + nxt.lstrip("/"), token=token, clear_oauth=True)
+
+
+def _redirect(path: str, token: str = "", clear_oauth: bool = False):
+    headers = {"location": path, "cache-control": "no-store"}
+    cookies = []
+    if token:
+        cookies.append(auth.session_cookie(token))
+    if clear_oauth:
+        cookies.append("rebuy_oauth=; Path=/api/auth/google; Max-Age=0")
+    if cookies:
+        headers["set-cookie"] = cookies
+    return 302, headers, b""
 
 
 @route("POST", "/api/signup", "none")
 def signup(ctx):
-    """Self-serve shop onboarding — this is how the platform reaches 100+ shops."""
+    """Self-serve onboarding. Gated by REBUY_ALLOW_SIGNUP in production."""
+    if not config.ALLOW_SIGNUP and not ctx.user:
+        raise ApiError("Self-serve signup is closed — contact sales to get set up", 403, "signup_closed")
     name = (ctx.b("shop_name") or "").strip()
     owner = (ctx.b("owner_name") or "").strip()
-    email = (ctx.b("email") or "").strip().lower()
+    email = auth.clean_email(ctx.b("email", ""))
     password = ctx.b("password") or ""
     phone = (ctx.b("phone") or "").strip()
-    if not name or not email or len(password) < 8:
-        raise ApiError("shop name, email and a password of 8+ characters are required")
-    if db.q1("SELECT id FROM users WHERE email=?", (email,)):
-        raise ApiError("an account with that email already exists", 409)
+    if not name or not email or not password:
+        raise ApiError("Shop name, your name, email and password are required", 400, "missing_fields")
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "shop"
     base, n = slug, 2
     while db.q1("SELECT id FROM shops WHERE slug=?", (slug,)):
@@ -85,6 +259,13 @@ def signup(ctx):
         n += 1
     plan = ctx.b("plan") or "starter"
     price = {"starter": 49000, "growth": 129000, "scale": 299000}.get(plan, 49000)
+    try:
+        auth.validate_password(password)
+        auth.assert_email_allowed(email)
+    except auth.AuthError as e:
+        raise ApiError(e.message, e.status, e.code)
+    if auth.find_user(email):
+        raise ApiError("An account with that email already exists", 409, "email_taken")
     shop_id = db.insert("shops", {
         "name": name[:120], "slug": slug, "owner_name": owner[:80], "owner_email": email,
         "phone": phone, "whatsapp_number": phone, "sender_name": name[:40],
@@ -93,16 +274,16 @@ def signup(ctx):
         "monthly_price": price, "currency": ctx.b("currency") or "UGX",
         "onboarded_at": db.now_iso(), "trial_ends_at": db.days_from_today(14), "created_at": db.now_iso(),
     })
-    uid = auth.create_user(shop_id, "owner", owner or name, email, password)
+    user = auth.provision_password_user(shop_id, "owner", owner or name, email, password)
     engine.seed_default_templates()
     db.audit(email, "shop.signup", shop_id, "shop", shop_id, f"{name} ({plan})")
-    res = auth.login(email, password)
-    body = json.dumps({"ok": True, "shop_id": shop_id, "user": res["user"], "shop": res["shop"],
-                       "next": "/#/onboarding"}, default=str).encode()
-    cookie = f"rebuy_session={res['token']}; Path=/; HttpOnly; SameSite=Lax; Max-Age={auth.SESSION_DAYS * 86400}"
-    return 200, {"content-type": "application/json", "set-cookie": cookie, "content-length": str(len(body))}, body
+    token = auth.start_session(user, _client_ip(ctx), _ua(ctx), "password")
+    shop = db.q1("SELECT * FROM shops WHERE id=?", (shop_id,))
+    return _session_response({"ok": True, "shop_id": shop_id, "user": auth.public_user(user), "shop": shop,
+                              "next": "/#/onboarding"}, token)
 
 
+# --------------------------------------------------------------------- profile
 # --------------------------------------------------------------------- profile
 @route("GET", "/api/shop", "shop")
 def get_shop(ctx):
@@ -1022,6 +1203,96 @@ def reports(ctx):
     }
 
 
+# ---------------------------------------------------------------------- team
+@route("GET", "/api/team", "shop")
+def team_list(ctx):
+    rows = db.q("""SELECT id, name, email, role, google_sub, last_login, created_at
+                   FROM users WHERE shop_id=? ORDER BY id""", (ctx.shop_id,))
+    for r in rows:
+        r["is_you"] = r["id"] == ctx.user["id"]
+        r["sign_in"] = "Google" if r["google_sub"] else ("Password" if True else "")
+        r["google_linked"] = bool(r["google_sub"])
+        r.pop("google_sub", None)
+    invites = db.q("""SELECT id, email, role, invited_by, expires_at, accepted_at, created_at
+                      FROM invites WHERE shop_id=? AND accepted_at IS NULL ORDER BY id DESC""", (ctx.shop_id,))
+    return {"members": rows, "invites": invites,
+            "roles": [{"key": "owner", "label": "Owner", "blurb": "Full access, billing, team"},
+                      {"key": "staff", "label": "Staff", "blurb": "Sales, customers, reminders"}]}
+
+
+@route("POST", "/api/team/invite", "shop")
+def team_invite(ctx):
+    if ctx.user.get("role") not in ("owner", "admin"):
+        raise ApiError("Only the shop owner can invite team members", 403, "forbidden")
+    email = auth.clean_email(ctx.b("email", ""))
+    role = ctx.b("role") or "staff"
+    if role not in ("owner", "staff"):
+        raise ApiError("Role must be owner or staff")
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", email):
+        raise ApiError("That email address does not look right")
+    if auth.find_user(email):
+        raise ApiError("That person already has an account — they can sign in with Google directly", 409)
+    token = secrets.token_urlsafe(24)
+    th = hashlib.sha256(token.encode()).hexdigest()
+    db.x("DELETE FROM invites WHERE shop_id=? AND email=?", (ctx.shop_id, email))
+    db.insert("invites", {"shop_id": ctx.shop_id, "email": email, "role": role, "token_hash": th,
+                          "invited_by": ctx.user["email"], "expires_at": db.days_from_today(7),
+                          "created_at": db.now_iso()})
+    shop = shop_of(ctx)
+    link = f"{config.PUBLIC_URL or ''}/#/login?invite={token}"
+    driver, cfg = providers.credentials_for(None, "email")
+    sent = providers.send_email(
+        email, f"You're invited to {shop['name']} on Rebuy",
+        f"{ctx.user['name']} invited you to {shop['name']} on Rebuy.\n\n"
+        f"Sign in with this Google address ({email}) here:\n{link}\n\n"
+        f"The link expires in 7 days.", cfg, driver)
+    db.audit(ctx.user["email"], "team.invited", ctx.shop_id, "invite", email, role)
+    return {"ok": True, "invite": {"email": email, "role": role, "link": link,
+                                   "email_sent": bool(sent and sent.get("ok"))},
+            "members": team_list(ctx)["members"], "invites": team_list(ctx)["invites"]}
+
+
+@route("POST", "/api/team/role", "shop")
+def team_role(ctx):
+    if ctx.user.get("role") != "owner":
+        raise ApiError("Only the shop owner can change roles", 403, "forbidden")
+    uid = ctx.bi("user_id", 0)
+    role = ctx.b("role") or ""
+    if role not in ("owner", "staff"):
+        raise ApiError("Role must be owner or staff")
+    target = db.q1("SELECT * FROM users WHERE id=? AND shop_id=?", (uid, ctx.shop_id))
+    if not target:
+        raise ApiError("Team member not found", 404)
+    if target["id"] == ctx.user["id"]:
+        raise ApiError("You cannot change your own role")
+    db.update("users", uid, {"role": role})
+    db.audit(ctx.user["email"], "team.role_changed", ctx.shop_id, "user", uid, role)
+    return {"ok": True, "members": team_list(ctx)["members"]}
+
+
+@route("POST", "/api/team/remove", "shop")
+def team_remove(ctx):
+    if ctx.user.get("role") != "owner":
+        raise ApiError("Only the shop owner can remove team members", 403, "forbidden")
+    uid = ctx.bi("user_id", 0)
+    if uid == ctx.user["id"]:
+        raise ApiError("You cannot remove yourself")
+    target = db.q1("SELECT * FROM users WHERE id=? AND shop_id=?", (uid, ctx.shop_id))
+    if not target:
+        raise ApiError("Team member not found", 404)
+    auth.logout_everywhere(uid)
+    db.x("DELETE FROM users WHERE id=? AND shop_id=?", (uid, ctx.shop_id))
+    db.audit(ctx.user["email"], "team.removed", ctx.shop_id, "user", uid, target["email"])
+    return {"ok": True, "members": team_list(ctx)["members"]}
+
+
+@route("POST", "/api/team/cancel-invite", "shop")
+def team_cancel_invite(ctx):
+    iid = ctx.bi("invite_id", 0)
+    db.x("DELETE FROM invites WHERE id=? AND shop_id=?", (iid, ctx.shop_id))
+    return {"ok": True, "invites": team_list(ctx)["invites"]}
+
+
 # ------------------------------------------------------------------- channel setup
 @route("GET", "/api/settings/channels", "shop")
 def channels(ctx):
@@ -1133,5 +1404,27 @@ def cycles(ctx):
 
 @route("GET", "/api/health", "none")
 def health(ctx):
-    return {"ok": True, "time": db.now_iso(), "shops": db.scalar("SELECT COUNT(*) FROM shops", (), 0),
-            "db": "supabase/postgres" if db.IS_PG else db.DB_PATH, "backend": db.backend()}
+    """Liveness + a non-secret view of how this instance is configured."""
+    cfgstatus = config.status()
+    checks = {
+        "database": True,
+        "secret_key": cfgstatus["secret_key_set"] or not cfgstatus["production"],
+        "google_oauth": cfgstatus["google_oauth"],
+        "public_url": bool(cfgstatus["public_url"]),
+    }
+    if cfgstatus["production"]:
+        warnings = []
+        if not checks["secret_key"]:
+            warnings.append("REBUY_SECRET_KEY is not set — sign-in state cannot be signed")
+        if not checks["google_oauth"]:
+            warnings.append("Google sign-in is not configured")
+        if not checks["public_url"]:
+            warnings.append("REBUY_PUBLIC_URL is not set — OAuth redirects will be inferred from Host")
+        if not cfgstatus["admin_emails"]:
+            warnings.append("REBUY_ADMIN_EMAILS is empty — no platform admin can sign in")
+    else:
+        warnings = []
+    return {"ok": True, "time": db.now_iso(),
+            "shops": db.scalar("SELECT COUNT(*) FROM shops", (), 0),
+            "db": "supabase/postgres" if db.IS_PG else "sqlite", "backend": db.backend(),
+            "config": cfgstatus, "warnings": warnings}

@@ -285,11 +285,12 @@ function loginView() {
     <h2 style="margin:0 0 4px;font-size:19px;letter-spacing:-.3px">Platform sign in</h2>
     <div class="muted tiny mb12">For the Rebuy team only.</div>
     <form onsubmit="doLogin(event)">
-      <div class="field"><label class="f">Email</label><input class="input" name="email" type="email" required value="admin@rebuy.app"></div>
-      <div class="field"><label class="f">Password</label><input class="input" name="password" type="password" required placeholder="Admin1234!"></div>
+      <div class="field"><label class="f">Email</label><input class="input" name="email" type="email" autocomplete="username" required placeholder="you@rebuy.ug"></div>
+      <div class="field"><label class="f">Password</label><input class="input" name="password" type="password" autocomplete="current-password" required placeholder="••••••••"></div>
       <button class="btn primary" style="width:100%;justify-content:center;padding:10px" type="submit">Sign in</button>
     </form>
-    <div class="tiny muted mt12">Demo account: <span class="mono">admin@rebuy.app</span> / <span class="mono">Admin1234!</span></div>
+    <div id="googleSlot" class="mt12"></div>
+    <div class="tiny muted mt12">Access requires a platform admin account — ask an existing admin to add your email to <span class="mono">REBUY_ADMIN_EMAILS</span>.</div>
     <div class="tiny mt8"><a href="/">← Back to the shop app</a></div>
   </div></div>`;
 }

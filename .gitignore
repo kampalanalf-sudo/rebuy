@@ -1,9 +1,28 @@
+# secrets — never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# local databases
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# python
 __pycache__/
-*.pyc
-data/*.db
-data/*.db-wal
-data/*.db-shm
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# node (used only by the jsdom render test)
 node_modules/
-package.json
 package-lock.json
-.vercel/
+
+# tooling
+.DS_Store
+*.log

@@ -79,20 +79,49 @@ CREATE TABLE IF NOT EXISTS users (
   role          TEXT NOT NULL DEFAULT 'owner', -- admin | owner | staff
   name          TEXT NOT NULL,
   email         TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  salt          TEXT NOT NULL,
+  password_hash TEXT DEFAULT '',
+  salt          TEXT DEFAULT '',
+  google_sub    TEXT DEFAULT '',
+  email_verified INTEGER DEFAULT 0,
   last_login    TEXT,
   created_at    TEXT NOT NULL,
   FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_users_google ON users(google_sub) WHERE google_sub <> '';
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   user_id    INTEGER NOT NULL,
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
+  ip         TEXT DEFAULT '',
+  user_agent TEXT DEFAULT '',
+  method     TEXT DEFAULT 'password',
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at    TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS invites (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_id    INTEGER NOT NULL,
+  email      TEXT NOT NULL,
+  role       TEXT DEFAULT 'staff',
+  token_hash TEXT NOT NULL,
+  invited_by TEXT DEFAULT '',
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_invite ON invites(shop_id, email);
 
 CREATE TABLE IF NOT EXISTS customers (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -700,6 +729,31 @@ def _pg_reset():
     _local.pg = None
 
 
+def _tz_today():
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime.now(timezone.utc) + timedelta(hours=3)).date()
+
+
+def _julian(ts) -> float:
+    """SQLite-compatible julianday(): days since the Julian epoch, or NULL."""
+    from datetime import datetime, timedelta, timezone
+
+    if ts in (None, "") or str(ts).strip().lower() in ("now", "current_timestamp"):
+        dt = datetime.now(timezone.utc)
+    else:
+        txt = str(ts).strip().replace("T", " ")
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y-%m-%d %H:%M"):
+            try:
+                dt = datetime.strptime(txt[:19], fmt).replace(tzinfo=timezone.utc)
+                break
+            except ValueError:
+                continue
+        else:
+            return 0.0
+    return (dt - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds() / 86400.0 + 2440587.5
+
+
 def connect():
     if IS_PG:
         return _pg()
@@ -709,6 +763,20 @@ def connect():
         conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout = 8000")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA foreign_keys = ON")
+        # Compat functions that exist natively in Postgres (schema_pg.py). Keeping
+        # the same SQL running on both engines is why these live here too.
+        conn.create_function(
+            "dayn", 2,
+            lambda _base_id, days: (_tz_today() + timedelta(days=int(days or 0))).strftime("%Y-%m-%d"),
+            deterministic=True,
+        )
+        conn.create_function(
+            "julianday", 1,
+            lambda ts: _julian(ts), deterministic=True,
+        )
+        conn.create_function("julianday", 0, lambda: _julian(None), deterministic=True)
         _local.conn = conn
     return conn
 
@@ -810,8 +878,16 @@ def scalar(sql: str, params: tuple | list = (), default=None):
 
 
 def x(sql: str, params: tuple | list = ()) -> int:
-    """Execute a write and commit; returns the new row id where one exists."""
+    """Execute a write and commit; returns the new row id where one exists.
+
+    SQLite is opened in Python's default deferred-transaction mode, so a write
+    that is not committed is rolled back when the connection closes — and with
+    a per-thread connection that means almost immediately. Postgres runs with
+    autocommit on, so only the SQLite path needs the explicit commit.
+    """
     _, rid = _exec(sql, params)
+    if not IS_PG:
+        connect().commit()
     return rid or 0
 
 
