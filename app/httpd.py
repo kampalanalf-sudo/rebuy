@@ -265,7 +265,13 @@ def _cross_origin(headers: dict) -> bool:
 
 
 CSP = os.environ.get("REBUY_CSP") or (
-    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+    "default-src 'self'; img-src 'self' data:; "
+    # The Ubuntu webfonts ship as base64 data: URIs inside the shell so the
+    # app renders correctly with no network and no CDN. Without an explicit
+    # font-src, default-src 'self' silently blocks them and the page falls
+    # back to the system font — a failure you only see in the console.
+    "font-src 'self' data:; "
+    "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self'; "
     "base-uri 'self'; form-action 'self'"
 )
