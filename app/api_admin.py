@@ -196,6 +196,51 @@ def admin_patch_shop(ctx):
     return {"ok": True, "shop": db.q1("SELECT * FROM shops WHERE id=?", (sid,))}
 
 
+@route("POST", "/api/admin/shops/:sid/demo-login", "admin")
+def admin_set_demo_login(ctx):
+    """Set or rotate the demo login for a tenant.
+
+    Why this exists: self-service password reset needs working email, and on a
+    deployment without SMTP the reset link goes to the sandbox driver and never
+    arrives. That would leave a demo account permanently locked with no way
+    back in. This gives an admin a supported way to (re)issue the credential.
+
+    Body: {"email": "...", "password": "..."} — password is optional and
+    generated when omitted, but the generated one is only returned once.
+    """
+    import secrets as _secrets
+
+    from . import auth as _auth
+
+    shop = db.q1("SELECT * FROM shops WHERE id=?", (ctx.params["sid"],))
+    if not shop:
+        raise ApiError("no such shop", 404, "not_found")
+    body = ctx.body if isinstance(ctx.body, dict) else {}
+    email = _auth.clean_email(body.get("email") or "")
+    if not email:
+        raise ApiError("an email is required", 400, "bad_email")
+    password = (body.get("password") or "").strip() or (
+        "Rebuy-" + _secrets.token_urlsafe(9) + "!")
+    try:
+        _auth.validate_password(password)
+    except _auth.AuthError as e:
+        raise ApiError(e.message, 400, e.code)
+
+    existing = _auth.find_user(email)
+    if existing:
+        _auth.set_password(existing["id"], password)
+        db.update("users", existing["id"], {"shop_id": shop["id"], "role": "owner"})
+        action = "demo_login_rotated"
+    else:
+        _auth.provision_password_user(shop["id"], "owner", shop["name"], email, password)
+        action = "demo_login_created"
+    _auth.logout_everywhere(_auth.find_user(email)["id"])
+    db.audit(ctx.user["email"], action, shop["id"], "shop", shop["id"], email)
+    return {"ok": True, "email": email, "password": password, "shop": shop["name"],
+            "note": "Shown once. Store it somewhere safe; the reset email is not "
+                    "delivered unless SMTP is configured."}
+
+
 @route("POST", "/api/admin/shops", "admin")
 def admin_create_shop(ctx):
     """Manually onboard a shop (sales-assisted onboarding)."""
