@@ -1258,7 +1258,7 @@ page("/clients", {}, async () => {
         </div>
         ${rows.length ? `<div class="bd" style="padding:0 16px 8px">
           ${rows.map(c => `<div class="recent-li" style="padding:11px 0;border-bottom:1px solid var(--line,#eee)">
-            <div class="avatar" style="background:#eef;color:#557;border-radius:8px">${esc((c.name || "?")[0].toUpperCase())}</div>
+            ${avatar(c.name)}
             <div class="grow"><div class="nm">${esc(c.name)}</div>
               <div class="ss">${esc(c.phone || "no phone")}${c.branch_label ? " · " + esc(c.branch_label) : ""}${c.last_service ? " · " + esc(c.last_service) : ""}</div></div>
             <div style="text-align:right">
@@ -1300,7 +1300,7 @@ page("/recalls", {}, async () => {
       <span class="badge">${rows.length}</span></div>
     <div class="bd" style="padding:${rows.length ? "4px 16px" : "18px"}">
       ${rows.length ? rows.map(r => `<div class="recent-li" style="padding:12px 0;border-bottom:1px solid var(--line,#eee)">
-        <div class="avatar" style="background:#ffefef;color:#a33;border-radius:8px">⏱</div>
+        <div class="avatar" style="background:var(--brand-50);color:var(--u-orange-lt);border-radius:10px;box-shadow:none">${icon("clock",16)}</div>
         <div class="grow"><div class="nm">${esc(r.client_name)}</div>
           <div class="ss">${esc(r.service_name || "service")}${r.branch_label ? " · " + esc(r.branch_label) : ""} · due ${esc(r.due_on)}</div></div>
         <div class="row" style="gap:6px">
