@@ -824,7 +824,26 @@ def shop_kpis(shop_id: int, days: int = 30) -> dict:
     k["revenue_recovered"] = db.scalar(
         "SELECT IFNULL(SUM(revenue),0) FROM reminders WHERE shop_id=? AND status='converted' AND sent_at>=?",
         (shop_id, since + " 00:00:00"), 0)
-    k["reply_rate"] = round(100.0 * k["replies"] / max(k["reminders_sent"], 1), 1)
+    # Reply rate is per OUTBOUND REMINDER, not per message. A single reminder
+    # often produces a multi-message WhatsApp thread, so a raw inbound/outbound
+    # message ratio can exceed 100% — three messages back and forth over one
+    # reminder read as a "169% reply rate", which is nonsense on a dashboard.
+    # Numerator is also capped at the denominator: a customer may write in about
+    # something unrelated to the reminder we counted, and no reply rate is >100%.
+    # Both numbers must come from the same population: reminders dispatched in
+    # the window. Filtering the numerator by replied_at and the denominator by
+    # sent_at mixes two different sets (a reminder sent in September and
+    # answered in October lands in the numerator but not the denominator), which
+    # is how the ratio came out as "264 of 187".
+    k["reminders_dispatched"] = db.scalar(
+        "SELECT COUNT(*) FROM reminders WHERE shop_id=? AND sent_at>=? AND status<>'cancelled'",
+        (shop_id, since + " 00:00:00"), 0)
+    k["reminders_replied"] = db.scalar(
+        "SELECT COUNT(*) FROM reminders WHERE shop_id=? AND sent_at>=? "
+        "AND status<>'cancelled' AND replied_at IS NOT NULL",
+        (shop_id, since + " 00:00:00"), 0)
+    k["reply_rate"] = round(100.0 * min(k["reminders_replied"], k["reminders_dispatched"])
+                            / max(k["reminders_dispatched"], 1), 1)
     k["conversion_rate"] = round(100.0 * k["conversions"] / max(k["reminders_sent"], 1), 1)
     k["retention_score"] = round(100.0 * k["active_customers"] / max(k["customers"], 1), 1)
     k["due_today"] = db.scalar("SELECT COUNT(*) FROM reminders WHERE shop_id=? AND status='scheduled' AND due_on<=?",

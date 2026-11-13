@@ -1,0 +1,185 @@
+{
+  "id": "/",
+  "name": "Rebuy — Customer Retention",
+  "short_name": "Rebuy",
+  "description": "Know when every customer is due to come back, and reach them at exactly that moment on WhatsApp, SMS or email.",
+  "start_url": "/#/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "background_color": "#17111A",
+  "theme_color": "#E95420",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "business",
+    "productivity",
+    "medical"
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-48.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Reminder queue",
+      "short_name": "Queue",
+      "description": "What Rebuy is about to send",
+      "url": "/#/reminders",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Record a sale",
+      "short_name": "New sale",
+      "description": "Log a sale and start the restock clock",
+      "url": "/#/sales",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "short_name": "Customers",
+      "description": "Who needs attention",
+      "url": "/#/customers",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Recalls due",
+      "short_name": "Recalls",
+      "description": "Clients whose service is due",
+      "url": "/#/recalls",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/shot-phone-dashboard.png",
+      "sizes": "1030x2288",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dashboard — revenue recovered, reminders due, reply rate"
+    },
+    {
+      "src": "/icons/shot-phone-reminders.png",
+      "sizes": "1030x2288",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "The reminder queue — every customer due, with the reason"
+    },
+    {
+      "src": "/icons/shot-phone-customers.png",
+      "sizes": "1030x2288",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Customers, with health bands and spend"
+    },
+    {
+      "src": "/icons/shot-dashboard.png",
+      "sizes": "1440x1000",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dashboard on a counter-top screen"
+    },
+    {
+      "src": "/icons/shot-reminders.png",
+      "sizes": "1440x1000",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Reminder queue on desktop"
+    }
+  ],
+  "prefer_related_applications": false
+}

@@ -126,6 +126,72 @@ def change_password(ctx):
     return _session_response({"ok": True, "user": auth.public_user(u)}, token)
 
 
+# ------------------------------------------------------ account deletion
+@route("POST", "/api/auth/delete-account", "user")
+def delete_account(ctx):
+    """Delete the caller's account and everything it owns.
+
+    Both stores require a deletion path that works from inside the app — Google
+    since 2024 ("Account deletion requirement"), Apple under 5.1.1(v). A web
+    form that only works on the website is not enough, so this is a real
+    endpoint the mobile shells call.
+
+    What "delete" means, and why it is this shape:
+
+      * An OWNER deletes the shop. That cascades to customers, sales, reminders,
+        messages, products, coupons, credentials and every other user on that
+        shop, because a shop with no owner and no data is the only honest
+        reading of "delete my account" for the person who signed up.
+      * Anyone else (staff, or a second owner) is removed from the shop and
+        their login is deleted. The shop stays.
+      * A platform admin cannot delete themselves through this route; that is
+        an operational decision for whoever runs the deployment.
+
+    A typed confirmation is required so a stray click cannot destroy a shop.
+    """
+    u = db.q1("SELECT * FROM users WHERE id=?", (ctx.user["id"],))
+    if not u:
+        raise ApiError("account not found", 404)
+    confirm = (ctx.b("confirm") or "").strip().lower()
+    if confirm not in (u["email"].lower(), "delete"):
+        raise ApiError("Type your email address (or the word delete) to confirm", 400)
+    if u["role"] == "admin":
+        raise ApiError("Platform admin accounts cannot be deleted from the app", 400)
+    if u.get("password_hash"):
+        if not auth.verify_password(ctx.b("password") or "", u["password_hash"], u.get("salt") or ""):
+            raise ApiError("Password is incorrect", 400)
+
+    shop_id = u["shop_id"]
+    email = u["email"]
+    if u["role"] == "owner" and shop_id:
+        others = db.scalar("SELECT COUNT(*) FROM users WHERE shop_id=? AND id<>?", (shop_id, u["id"]), 0)
+        # Every table that hangs off a shop. Listed explicitly rather than
+        # relying on ON DELETE CASCADE, because SQLite only enforces foreign
+        # keys when the pragma is on and a half-deleted shop is worse than a
+        # failed request.
+        for table in ("messages", "reminders", "sale_items", "sales", "receipts", "import_jobs",
+                      "access_log", "coupons", "loyalty_events", "credentials",
+                      "products", "clients", "customers", "push_tokens", "invites"):
+            try:
+                db._exec(f"DELETE FROM {table} WHERE shop_id=?", (shop_id,))
+            except Exception:
+                pass  # a table this deployment does not have
+        db._exec("DELETE FROM invites WHERE shop_id=?", (shop_id,))
+        db._exec("DELETE FROM users WHERE shop_id=?", (shop_id,))
+        db._exec("DELETE FROM shops WHERE id=?", (shop_id,))
+        db.audit(email, "account.deleted_shop", shop_id,
+                 detail=f"deleted shop {shop_id}; {others} other user(s) removed with it")
+    else:
+        db._exec("DELETE FROM users WHERE id=?", (u["id"],))
+        db.audit(email, "account.deleted_user", shop_id)
+
+    auth.logout_everywhere(u["id"])
+    body = json.dumps({"ok": True, "deleted": True,
+                       "shop_deleted": bool(u["role"] == "owner" and shop_id)}).encode()
+    return 200, {"content-type": "application/json", "set-cookie": auth.clear_cookie(),
+                 "content-length": str(len(body))}, body
+
+
 # ------------------------------------------------------------ password reset
 @route("POST", "/api/auth/forgot", "none")
 def forgot_password(ctx):
@@ -824,6 +890,12 @@ def list_reminders(ctx):
                     WHERE {w} ORDER BY (r.status='scheduled') DESC, r.due_on DESC, r.id DESC LIMIT 200""", params)
     counts = {r["status"]: r["n"] for r in db.q(
         "SELECT status, COUNT(*) n FROM reminders WHERE shop_id=? GROUP BY status", (sid,))}
+    # "Sent" on the reminders page is what the shopkeeper means by it: every
+    # reminder that left the building, whichever state it ended up in. Counting
+    # only status='sent' showed "2" directly beside "Converted 235", which looks
+    # broken — those 235 were sent too, they have simply moved on since.
+    counts["dispatched"] = db.scalar(
+        "SELECT COUNT(*) FROM reminders WHERE shop_id=? AND sent_at IS NOT NULL", (sid,), 0)
     return {"rows": rows, "counts": counts,
             "by_kind": db.q("SELECT kind, COUNT(*) n FROM reminders WHERE shop_id=? GROUP BY kind", (sid,))}
 

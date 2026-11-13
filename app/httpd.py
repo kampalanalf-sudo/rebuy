@@ -231,12 +231,30 @@ def serve_file(path: str, accept_encoding: str = "") -> tuple[int, dict, bytes] 
     ext = os.path.splitext(full)[1].lower()
     ctype = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
              ".js": "application/javascript; charset=utf-8", ".json": "application/json",
+             ".webmanifest": "application/manifest+json; charset=utf-8",
              ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
              ".ico": "image/x-icon", ".woff2": "font/woff2", ".csv": "text/csv"}.get(ext, "application/octet-stream")
     with open(full, "rb") as f:
         data = f.read()
-    return 200, {"content-type": ctype, "content-length": str(len(data)),
-                 "cache-control": "no-cache" if ext == ".html" else "public, max-age=300"}, data
+    hdrs = {"content-type": ctype, "content-length": str(len(data))}
+    if rel == "sw.js":
+        # The service worker is the one file that must never be served from a
+        # stale HTTP cache: a cached copy would pin every client to an old
+        # shell across deploys. Scope it to the root so it can control "/".
+        hdrs["cache-control"] = "no-cache, no-store, must-revalidate"
+        hdrs["service-worker-allowed"] = "/"
+    elif ext == ".webmanifest":
+        # Cheap to revalidate (it is a few KB) and a stale manifest means a
+        # stale icon or start_url after a deploy.
+        hdrs["cache-control"] = "no-cache"
+    elif ext == ".html":
+        hdrs["cache-control"] = "no-cache"
+    elif ext == ".json":
+        # Covers /.well-known/assetlinks.json, which Google re-reads on a timer.
+        hdrs["cache-control"] = "public, max-age=60"
+    else:
+        hdrs["cache-control"] = "public, max-age=300"
+    return 200, hdrs, data
 
 
 MAX_BODY_BYTES = int(os.environ.get("REBUY_MAX_BODY", str(8 * 1024 * 1024)))
@@ -273,6 +291,10 @@ CSP = os.environ.get("REBUY_CSP") or (
     "font-src 'self' data:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self'; "
+    # PWA: the service worker and the manifest are their own directives. They
+    # fall back to default-src, so 'self' is implied — but naming them keeps a
+    # future tightening of default-src from silently killing installability.
+    "worker-src 'self'; manifest-src 'self'; "
     "base-uri 'self'; form-action 'self'"
 )
 

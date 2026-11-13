@@ -43,7 +43,15 @@ def overview(ctx):
         "due_now": db.scalar("SELECT COUNT(*) FROM reminders WHERE status='scheduled' AND due_on<=?", (db.today(),), 0),
         "live_channels": db.scalar("SELECT COUNT(*) FROM credentials WHERE enabled=1 AND driver<>'sandbox'", (), 0),
     }
-    k["reply_rate"] = round(100.0 * k["messages_in"] / max(k["messages_out"], 1), 1)
+    # Same definition as the shop dashboard: replies per outbound REMINDER,
+    # capped at 100%. A raw message ratio counts every line of a WhatsApp
+    # thread and reads as "169%" once customers chat back.
+    k["reminders_replied"] = db.scalar(
+        "SELECT COUNT(*) FROM reminders WHERE sent_at>=? AND status<>'cancelled' "
+        "AND replied_at IS NOT NULL", (since,), 0)
+    k["reminders_dispatched"] = k["reminders_sent"]
+    k["reply_rate"] = round(100.0 * min(k["reminders_replied"], k["reminders_dispatched"])
+                            / max(k["reminders_dispatched"], 1), 1)
     k["conversion_rate"] = round(100.0 * k["reminders_converted"] / max(k["reminders_sent"], 1), 1)
     k["delivery_rate"] = round(100.0 * (k["messages_out"] - k["messages_failed"]) / max(k["messages_out"], 1), 1)
     k["arpu"] = round(k["mrr"] / max(k["shops_total"], 1), 0)

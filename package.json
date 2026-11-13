@@ -1,5 +1,9 @@
 {
   "dependencies": {
     "jsdom": "^29.1.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.0",
+    "lighthouse": "^12.8.2"
   }
 }
