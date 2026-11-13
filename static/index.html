@@ -310,6 +310,20 @@
     background:#fff;transition:.18s;box-shadow:0 1px 3px rgba(0,0,0,.4)}
   .switch.on:after{transform:translateX(17px)}
 
+  /* Conversation rows. These carried their own light-theme inline colours
+     (#f7f5ff / #f3f1fa) from before the dark redesign, so the selected row
+     rendered as a white block on the dark shell. */
+  .convo{display:flex;gap:9px;padding:11px 14px;border-bottom:1px solid var(--line);
+    color:inherit;transition:background .14s}
+  .convo:hover{background:rgba(255,255,255,.035);text-decoration:none}
+  .convo.on{background:rgba(233,84,32,.13);box-shadow:inset 2px 0 0 var(--u-orange)}
+
+  /* Import dropzone. Was a pale lavender box (#fbfaff on #d5d0ea) left over
+     from the light theme — it glowed against the dark shell. */
+  .dropzone{border:2px dashed var(--line-2);border-radius:14px;padding:32px 20px;text-align:center;
+    background:rgba(255,255,255,.02);transition:border-color .15s,background .15s}
+  .dropzone.hot{border-color:var(--u-orange);background:rgba(233,84,32,.08)}
+
   /* ---------- toasts ---------- */
   #toasts{position:fixed;right:18px;bottom:18px;z-index:200;display:flex;flex-direction:column;gap:9px;max-width:360px}
   .toast{background:#2C2133;border:1px solid var(--line-2);border-left:3px solid var(--u-orange);
@@ -1127,7 +1141,7 @@ page("/inbox", {}, async (ctx) => {
     <div class="card" style="max-height:74vh;display:flex;flex-direction:column">
       <div class="hd"><h3>Conversations</h3><div class="grow"></div>${unread ? `<span class="badge bad">${unread} unread</span>` : ""}</div>
       <div style="overflow:auto;flex:1">
-      ${convs.map(c => `<a href="#/inbox/${c.customer_id}" style="display:flex;gap:9px;padding:11px 14px;border-bottom:1px solid #f3f1fa;color:inherit;${c.customer_id === activeId ? "background:#f7f5ff" : ""}">
+      ${convs.map(c => `<a href="#/inbox/${c.customer_id}" class="convo${c.customer_id === activeId ? " on" : ""}">
         <div class="avatar" style="background:${avColor(c.name)}">${esc(initials(c.name))}</div>
         <div style="flex:1;min-width:0">
           <div class="spread"><div style="font-weight:650;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</div>
@@ -2156,8 +2170,8 @@ page("/import", {}, async () => {
       </div>
       <div class="bd" style="border-top:1px solid var(--line)">
       ${IMPORT_STATE.tab === "file" ? `
-        <div id="drop" style="border:2px dashed #d5d0ea;border-radius:14px;padding:32px 20px;text-align:center;background:#fbfaff;transition:.15s"
-             ondragover="event.preventDefault();this.style.borderColor='#5b3df5'" ondragleave="this.style.borderColor='#d5d0ea'" ondrop="dropFile(event)">
+        <div id="drop" class="dropzone" ondragover="event.preventDefault();this.classList.add('hot')"
+             ondragleave="this.classList.remove('hot')" ondrop="dropFile(event)">
           <div style="font-size:30px">⇪</div>
           <div style="font-weight:650;margin-top:8px">Drop your sales file here</div>
           <div class="tiny muted mt8">CSV or Excel (.xlsx). We auto-detect the columns — no mapping needed.<br>Receipt no, date, customer, phone, item, qty, price.</div>
