@@ -1,0 +1,98 @@
+# Advances the reminder queue every 10 minutes.
+#
+# Why this exists: on Vercel the background worker thread never starts (only
+# httpd.serve() starts it, and Vercel calls httpd.dispatch()). Message delivery
+# therefore depends entirely on external ticks. Vercel's own cron is pinned at
+# "0 3 * * *" -- once a day -- because the Hobby plan rejects any schedule that
+# fires more than once per day. A reminder due at 09:00 would go out at 06:00
+# the next morning, so this workflow supplies the missing frequency for free.
+#
+# It calls GET /api/cron/tick with CRON_SECRET. GET is the method Vercel Cron
+# uses too; the handler accepts it as long as the secret matches.
+
+name: reminder tick
+
+on:
+  schedule:
+    # GitHub's scheduler is best-effort: under load a run can be delayed or,
+    # rarely, skipped. Every 10 minutes with an occasional gap is still ~144
+    # ticks a day versus 1. Nothing here assumes exactly-once execution;
+    # engine.tick() is idempotent per due reminder.
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}        # manual "Run workflow" button for testing
+
+# Two overlapping ticks are harmless (the sweep is the same rows), but a queue
+# keeps logs readable and avoids pointless function invocations.
+concurrency:
+  group: reminder-tick
+  cancel-in-progress: false
+
+permissions: {}               # no repo access needed; this only calls an API
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Advance the queue
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          TARGET: ${{ vars.REBUY_URL || 'https://rebuy.website' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::CRON_SECRET is not set. Add it in Settings -> Secrets and variables -> Actions (repository secret)."
+            exit 1
+          fi
+
+          # -sS keeps the body quiet on success but still shows curl errors.
+          # --max-time guards against a hung function; Vercel's own limit is lower.
+          code=$(curl -sS -o /tmp/tick.json -w '%{http_code}' \
+            --max-time 30 --retry 2 --retry-delay 5 \
+            -H "authorization: Bearer ${CRON_SECRET}" \
+            "${TARGET}/api/cron/tick")
+
+          echo "HTTP ${code}"
+          head -c 600 /tmp/tick.json; echo
+
+          case "$code" in
+            200) echo "::notice::tick ok" ;;
+            403) echo "::error::403 -- CRON_SECRET does not match the one in Vercel."; exit 1 ;;
+            404) echo "::error::404 -- the endpoint is not deployed at ${TARGET}."; exit 1 ;;
+            *)   echo "::error::unexpected status ${code}"; exit 1 ;;
+          esac
+
+          # Surface a failing sweep in the Actions UI rather than only in logs.
+          if grep -q '"errors": *[1-9]' /tmp/tick.json; then
+            echo "::warning::the sweep reported errors; check /api/health and Vercel logs"
+          fi
+
+      # A missed tick that nobody notices is how the queue silently stalls.
+      # /api/health exposes worker.age_seconds, so this fails the run when the
+      # last successful sweep is genuinely stale rather than merely unreachable.
+      - name: Check the heartbeat is fresh
+        if: always()
+        env:
+          TARGET: ${{ vars.REBUY_URL || 'https://rebuy.website' }}
+        run: |
+          set -euo pipefail
+          body=$(curl -sS --max-time 30 "${TARGET}/api/health")
+          echo "$body" | head -c 500; echo
+
+          echo "$body" | grep -q '"ok": *true' || { echo "::error::health check failed"; exit 1; }
+
+          age=$(echo "$body" | grep -o '"age_seconds": *[0-9-]*' | grep -o '[-0-9]*$' || true)
+          if [ -z "${age:-}" ] || [ "$age" = "null" ]; then
+            # null means no tick recorded yet. Fine on a fresh deploy, a stall
+            # after the first one -- decided by the first step's status code.
+            echo "::notice::no tick recorded yet (last_tick=never)"
+            exit 0
+          fi
+          echo "last tick was ${age}s ago"
+          # 10-minute schedule + GitHub's best-effort scheduling; 45 min means
+          # several runs were missed, not just one delayed.
+          if [ "$age" -gt 2700 ]; then
+            echo "::error::the queue has not advanced for ${age}s -- ticks are not landing"
+            exit 1
+          fi
